@@ -18,6 +18,31 @@ const SheetsAPI = {
   },
 
   /**
+   * Build a canonical key for a phone number so that the SAME contact is
+   * recognized as a duplicate regardless of formatting OR the optional
+   * Brazilian 9th digit. Both "+55 85 8532-3726" and "+55 85 98532-3726"
+   * collapse to the same 12-digit key.
+   * @param {string} raw
+   * @returns {string} digits-only canonical key (empty if invalid)
+   */
+  phoneKey(raw) {
+    if (!raw) return '';
+    let d = raw.toString().replace(/\D/g, '');
+    if (!d) return '';
+    // Local BR number without country code → prefix 55
+    if (d.length === 10 || d.length === 11) d = '55' + d;
+    // BR mobile WITH 9th digit (55 + DDD(2) + 9 + 8 = 13) → drop the leading 9
+    if (d.length === 13 && d.startsWith('55')) {
+      const ddd = d.substring(2, 4);
+      const local = d.substring(4); // 9 digits
+      if (local.startsWith('9')) {
+        d = '55' + ddd + local.substring(1); // → 12 digits, sem o 9
+      }
+    }
+    return d;
+  },
+
+  /**
    * Convert column letter to index (A=0, B=1, ..., Z=25, AA=26, etc.)
    * @param {string} col - Column letter(s)
    * @returns {number} Zero-based column index
@@ -178,9 +203,9 @@ const SheetsAPI = {
       if (data.values) {
         data.values.forEach(row => {
           if (row[0]) {
-            // Normalize the phone for comparison
-            const phone = row[0].toString().replace(/\D/g, '');
-            if (phone) phones.add(phone);
+            // Canonical key: tolerates formatting and the optional 9th digit
+            const key = this.phoneKey(row[0]);
+            if (key) phones.add(key);
           }
         });
       }

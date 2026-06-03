@@ -282,6 +282,11 @@ async function handleSendToSheet() {
     return;
   }
 
+  if (!currentContact.phone) {
+    showToast('Contato sem telefone — não é possível enviar', 'error');
+    return;
+  }
+
   const settings = await getSettings();
   if (!settings || !settings.spreadsheetId) {
     showToast('Configure a planilha primeiro', 'error');
@@ -321,6 +326,10 @@ async function handleSendToSheet() {
         token
       }
     });
+
+    if (!exportResult) {
+      throw new Error('Sem resposta do serviço da extensão. Recarregue a extensão e tente novamente.');
+    }
 
     if (!exportResult.success && String(exportResult.error).includes('401')) {
       updateProgress(70, 'Renovando autenticação...');

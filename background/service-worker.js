@@ -76,10 +76,10 @@ async function handleExportToSheets(data) {
     token
   );
 
-  // Filter out duplicates
+  // Filter out duplicates (canonical key tolerates the optional 9th digit)
   const newContacts = contacts.filter(c => {
-    const normalizedPhone = c.phone.replace(/\D/g, '');
-    return !existingPhones.has(normalizedPhone);
+    const key = SheetsAPI.phoneKey(c.phone);
+    return !existingPhones.has(key);
   });
 
   if (newContacts.length === 0) {
