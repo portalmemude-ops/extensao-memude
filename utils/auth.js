@@ -43,6 +43,34 @@ const AUTH = {
   },
 
   /**
+   * Confirma que o token ainda é válido junto ao Google (não foi
+   * revogado nem expirou). Faz uma chamada leve a tokeninfo.
+   * Em caso de falha, invalida o cache e devolve false.
+   * @returns {Promise<boolean>}
+   */
+  async validateLive() {
+    const stored = await this._getStored();
+    if (!stored || !stored.accessToken) return false;
+    try {
+      const resp = await fetch('https://oauth2.googleapis.com/tokeninfo?access_token=' + encodeURIComponent(stored.accessToken));
+      if (!resp.ok) {
+        await this.invalidate();
+        return false;
+      }
+      const info = await resp.json();
+      // Atualiza expiresAt com o valor autoritativo do Google
+      if (info && info.expires_in) {
+        const expiresAt = Date.now() + parseInt(info.expires_in, 10) * 1000;
+        await this._setStored({ accessToken: stored.accessToken, expiresAt });
+      }
+      return true;
+    } catch (e) {
+      // Sem rede: assume válido localmente, não invalida
+      return !!(stored.expiresAt - this.EXPIRY_BUFFER_MS > Date.now());
+    }
+  },
+
+  /**
    * Abre a janela de login do Google e guarda o token.
    * @returns {Promise<string>} access token
    */

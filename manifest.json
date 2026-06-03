@@ -14,7 +14,8 @@
   "host_permissions": [
     "https://web.whatsapp.com/*",
     "https://sheets.googleapis.com/*",
-    "https://www.googleapis.com/*"
+    "https://www.googleapis.com/*",
+    "https://oauth2.googleapis.com/*"
   ],
   "background": {
     "service_worker": "background/service-worker.js"
@@ -25,7 +26,10 @@
         "https://web.whatsapp.com/*"
       ],
       "js": [
+        "utils/logger.js",
+        "utils/phone-utils.js",
         "utils/phone-extractor.js",
+        "content/overlay.js",
         "content/content.js"
       ],
       "css": [
@@ -34,6 +38,22 @@
       "run_at": "document_idle"
     }
   ],
+  "commands": {
+    "capture-current": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+S",
+        "mac": "Command+Shift+S"
+      },
+      "description": "Capturar contato do chat aberto e enviar"
+    },
+    "open-overlay": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+M",
+        "mac": "Command+Shift+M"
+      },
+      "description": "Abrir o painel MeMude no WhatsApp"
+    }
+  },
   "action": {
     "default_popup": "popup/popup.html",
     "default_icon": {

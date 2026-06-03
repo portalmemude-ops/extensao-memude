@@ -11,8 +11,16 @@
 (function () {
   'use strict';
 
+  // Shared utilities
+  const log = (typeof Logger !== 'undefined')
+    ? Logger
+    : { debug() {}, info() {}, warn: (...a) => console.warn(...a), error: (...a) => console.error(...a) };
+  const PU = (typeof PhoneUtils !== 'undefined') ? PhoneUtils : null;
+
   const JID_REGEX = /(\d{10,15})@(c\.us|s\.whatsapp\.net)/g;
-  const PHONE_PATTERN = /\+?\d{1,4}[\s\-.]?\(?\d{1,4}\)?[\s\-.]?\d{4,5}[\s\-.]?\d{4}/;
+  // Padrão mais restritivo: exige um '+' OU pelo menos 11 dígitos (BR completo)
+  // para reduzir falso positivo de números no corpo de mensagens.
+  const PHONE_PATTERN = /\+\d{1,4}[\s\-.]?\(?\d{2,4}\)?[\s\-.]?\d{4,5}[\s\-.]?\d{4}|\b\d{11,13}\b/;
 
   // ---- JID Cache ----
   const jidCache = new Map();
@@ -58,7 +66,7 @@
       });
     } catch (e) {}
 
-    console.log('[MeMude] Network interceptor active');
+    log.debug('Network interceptor active');
   }
 
   function scanForJids(text) {
@@ -71,48 +79,11 @@
   }
 
   // ============================================================
-  // Helpers
+  // Helpers — delegam para PhoneUtils quando disponível
   // ============================================================
-  function looksLikePhone(str) {
-    if (!str) return false;
-    const cleaned = str.replace(/[\s\-\(\)\.\+]/g, '');
-    return /^\d{8,15}$/.test(cleaned);
-  }
-
-  function normalizePhone(raw) {
-    if (!raw) return '';
-    let p = raw.trim();
-    const hasPlus = p.startsWith('+');
-    p = p.replace(/\D/g, '');
-    if (hasPlus) p = '+' + p;
-    // Brazilian numbers from JIDs come as 55XXXXXXXXXX (12 or 13 digits)
-    if (!hasPlus && p.startsWith('55') && (p.length === 12 || p.length === 13)) p = '+' + p;
-    // Local BR numbers without country code
-    if (!hasPlus && !p.startsWith('+') && (p.length === 10 || p.length === 11)) p = '+55' + p;
-    return p;
-  }
-
-  /**
-   * Add the 9th digit to Brazilian mobile numbers that are missing it.
-   * +55XX8XXXXXXX (12 digits after +) → +55XX9 8XXXXXXX (13 digits after +)
-   * Only affects numbers starting with +55 where the local part has 8 digits.
-   */
-  function add9thDigit(phone) {
-    if (!phone) return phone;
-    // Match +55 + DDD(2) + 8-digit local number (total 12 digits after +)
-    const match = phone.match(/^\+55(\d{2})(\d{8})$/);
-    if (match) {
-      const ddd = match[1];
-      const local = match[2];
-      // Only add 9 if local number doesn't already start with 9
-      if (!local.startsWith('9')) {
-        const result = `+55${ddd}9${local}`;
-        console.log(`[MeMude] Added 9th digit: ${phone} → ${result}`);
-        return result;
-      }
-    }
-    return phone;
-  }
+  const looksLikePhone = (s) => PU ? PU.looksLikePhone(s) : !!s && /^\d{8,15}$/.test(String(s).replace(/[\s\-()\.\+]/g, ''));
+  const normalizePhone = (s) => PU ? PU.normalizePhone(s) : String(s || '');
+  const add9thDigit    = (s) => PU ? PU.add9thDigit(s)    : s;
 
   /**
    * Check if a string is a known WhatsApp UI text (not a real name).
@@ -177,32 +148,39 @@
   }
 
   function isChatOpen() {
-    const selectors = [
-      '#main',
-      '[data-testid="conversation-panel-wrapper"]',
-      '[data-testid="conversation-compose-box-input"]',
-      'footer [contenteditable="true"]'
-    ];
-    return selectors.some(s => document.querySelector(s));
+    const main = document.querySelector('#main');
+    if (main && main.querySelector('header')) return true;
+    if (document.querySelector('footer [contenteditable="true"]')) return true;
+    if (document.querySelector('[data-testid="conversation-panel-wrapper"]')) return true;
+    return false;
   }
 
   function isGroupChat() {
-    if (document.querySelector('[data-testid="default-group"], [data-icon="default-group"], [data-testid="group-title"]')) return true;
-    if (document.querySelector('[data-testid="group-subject-input"]')) return true;
+    // Indicadores explícitos (legacy testids + aria-label atual)
+    if (document.querySelector('[data-icon="default-group"], [data-testid="default-group"], [data-testid="group-title"], [data-testid="group-subject-input"]')) {
+      return true;
+    }
 
     const main = document.querySelector('#main');
     if (!main) return false;
     const header = main.querySelector('header');
     if (!header) return false;
 
+    // Em alguns layouts atuais, o header de grupo lista participantes em
+    // span[dir="auto"]: "Maria, João, Pedro" ou "5 participantes".
     const spans = header.querySelectorAll('span[dir="auto"], span[title]');
     let foundFirst = false;
     for (const span of spans) {
       const text = (span.getAttribute('title') || span.textContent || '').trim();
       if (!text) continue;
       if (!foundFirst) { foundFirst = true; continue; }
-      if (text.includes(',')) return true;
-      if (/\d+\s*(participante|membro|member|participant)/i.test(text)) return true;
+      if (text.includes(',') && text.split(',').length >= 3) return true;
+      if (/\d+\s*(participante|membro|member|participant|integrante)/i.test(text)) return true;
+    }
+
+    // Botão "Adicionar participante" aparece só em grupos
+    if (header.querySelector('[aria-label*="participante" i], [aria-label*="participant" i]')) {
+      return true;
     }
     return false;
   }
@@ -237,26 +215,46 @@
 
   // ============================================================
   // Find the right-side panel / drawer (works for all scenarios)
+  // Cobre testids legados + aria-label atual (PT/EN/ES).
   // ============================================================
   function findDrawer() {
-    return document.querySelector('[data-testid="contact-info-drawer"]')
-        || document.querySelector('section[data-testid="contact-info"]')
-        || document.querySelector('[data-animate-drawer-open="true"]')
-        || document.querySelector('[data-testid="panel-right"]')
-        || document.querySelector('#app aside');
+    const candidates = [
+      '[data-testid="contact-info-drawer"]',
+      'section[data-testid="contact-info"]',
+      '[data-animate-drawer-open="true"]',
+      '[data-testid="panel-right"]',
+      'aside[aria-label*="contato" i]',
+      'aside[aria-label*="contact" i]',
+      'div[role="region"][aria-label*="contato" i]',
+      'div[role="region"][aria-label*="contact" i]',
+      'span[role="region"][aria-label*="contato" i]',
+      '#app aside section',
+      '#app aside'
+    ];
+    for (const sel of candidates) {
+      const el = document.querySelector(sel);
+      if (el) return el;
+    }
+    return null;
   }
 
   // ============================================================
   // Open the drawer by clicking the header
   // ============================================================
   async function openDrawer(header) {
-    const clickTarget = header.querySelector('[data-testid="conversation-header-contact-info"]')
-                     || header.querySelector('[role="button"]')
-                     || header.querySelector('div[tabindex="-1"]')
-                     || header.querySelector('span[title]')?.closest('[role="button"]')
-                     || header;
+    const clickTarget =
+         header.querySelector('[data-testid="conversation-header-contact-info"]')
+      || header.querySelector('[aria-label*="Dados do contato" i]')
+      || header.querySelector('[aria-label*="Informações do contato" i]')
+      || header.querySelector('[aria-label*="Contact info" i]')
+      || header.querySelector('[aria-label*="Datos del contacto" i]')
+      || header.querySelector('div[role="button"]')
+      || header.querySelector('[role="button"]')
+      || header.querySelector('div[tabindex="-1"]')
+      || header.querySelector('span[title]')?.closest('[role="button"]')
+      || header;
 
-    console.log('[MeMude] Clicking header to open contact drawer...');
+    log.debug('Clicking header to open contact drawer...');
     clickTarget.click();
 
     // Wait slightly for animation to start
@@ -276,7 +274,7 @@
       // Wait extra for drawer content to fully render
       // Business profiles load additional sections asynchronously
       await waitMs(800);
-      console.log('[MeMude] Drawer opened and content loaded');
+      log.debug('Drawer opened and content loaded');
     }
 
     return drawer;
@@ -284,19 +282,17 @@
 
   // ============================================================
   // MAIN EXTRACTION (async)
+  // Ordem:
+  //   1) JID das mensagens (mais confiável, sem abrir drawer)
+  //   2) Header → nome e/ou telefone
+  //   3) Data-attrs do #main / DOM scan / cache (fallbacks p/ telefone)
+  //   4) Drawer só quando ainda faltar algo (lento por causa do click)
   // ============================================================
   async function extractActiveContact() {
-    console.log('[MeMude] === Starting extraction ===');
+    log.debug('=== Starting extraction ===');
 
-    if (!isChatOpen()) {
-      console.log('[MeMude] No chat open');
-      return { error: 'NO_CHAT_OPEN', contact: null };
-    }
-
-    if (isGroupChat()) {
-      console.log('[MeMude] Group chat detected');
-      return { error: 'GROUP_CHAT', contact: null };
-    }
+    if (!isChatOpen()) return { error: 'NO_CHAT_OPEN', contact: null };
+    if (isGroupChat()) return { error: 'GROUP_CHAT', contact: null };
 
     let name = '';
     let phone = '';
@@ -304,126 +300,131 @@
     const main = document.querySelector('#main');
     const header = main ? main.querySelector('header') : null;
 
-    // =====================================================
-    // STEP 1: Read the header title
-    // =====================================================
+    // --- 1) JID das mensagens (rápido e estável) ---
+    phone = getPhoneFromMessageJids();
+
+    // --- 2) Header: extrai nome e/ou telefone ---
     if (header) {
-      console.log('[MeMude] Found #main > header');
+      const headerInfo = readHeader(header);
+      if (headerInfo.name) name = headerInfo.name;
+      if (!phone && headerInfo.phone) phone = headerInfo.phone;
+    }
 
-      const headerSpans = header.querySelectorAll('span[title]');
-      for (const span of headerSpans) {
-        const titleVal = span.getAttribute('title');
-        if (!titleVal || titleVal.length < 2) continue;
+    // --- 3) Fallbacks de telefone (não abre drawer) ---
+    if (!phone) phone = getPhoneFromConversationAttributes();
+    if (!phone) phone = getPhoneFromFullDomScan();
+    if (!phone && jidCache.size > 0) {
+      const entries = Array.from(jidCache.entries());
+      phone = normalizePhone(entries[entries.length - 1][1]);
+      log.debug(`Phone from JID cache (last entry): ${phone}`);
+    }
 
-        if (looksLikePhone(titleVal)) {
-          phone = normalizePhone(titleVal);
-          console.log(`[MeMude] Header title is a PHONE: ${phone}`);
-        } else if (!isWhatsAppUIText(titleVal)) {
-          name = titleVal.trim();
-          console.log(`[MeMude] Header title is a NAME: "${name}"`);
+    // --- 4) Drawer: usado só se faltar telefone OU se temos só o telefone
+    //                e queremos descobrir o nome ---
+    if (header && (!phone || !name)) {
+      const drawer = await ensureDrawer(header);
+      if (drawer) {
+        if (!phone) {
+          const p = extractPhoneFromDrawerContent(drawer);
+          if (p) phone = p;
         }
-        break;
-      }
-
-      if (!phone && !name) {
-        const autoSpans = header.querySelectorAll('span[dir="auto"]');
-        for (const span of autoSpans) {
-          const text = span.textContent.trim();
-          if (!text || text.length < 2) continue;
-          if (looksLikePhone(text)) {
-            phone = normalizePhone(text);
-            console.log(`[MeMude] Header span[dir=auto] is a PHONE: ${phone}`);
-          } else if (!isWhatsAppUIText(text)) {
-            name = text;
-            console.log(`[MeMude] Header span[dir=auto] is a NAME: "${name}"`);
-          }
-          break;
+        if (!name) {
+          const n = extractNameFromDrawerContent(drawer);
+          if (n) name = n;
         }
+        // se nós abrimos, fechamos
+        if (drawer.__memudeOpenedByUs) closeDrawer(drawer);
       }
     }
 
-    // =====================================================
-    // STEP 2: If we have NAME but no PHONE — need to find phone
-    // This is the critical path for saved contacts & Business accounts
-    // =====================================================
-    if (name && !phone) {
-      console.log('[MeMude] Have name but no phone. Starting multi-strategy search...');
-
-      // --- Strategy 2A: Message data-id JIDs (MOST RELIABLE, no drawer needed) ---
-      phone = getPhoneFromMessageJids();
-
-      // --- Strategy 2B: Data attributes in #main ---
-      if (!phone) {
-        phone = getPhoneFromConversationAttributes();
-      }
-
-      // --- Strategy 2C: Open contact drawer ---
-      if (!phone && header) {
-        phone = await getPhoneFromContactDrawer(header);
-      }
-
-      // --- Strategy 2D: Full DOM scan for any JID in #main ---
-      if (!phone) {
-        phone = getPhoneFromFullDomScan();
-      }
-
-      // --- Strategy 2E: JID cache (last intercepted) ---
-      if (!phone && jidCache.size > 0) {
-        const entries = Array.from(jidCache.entries());
-        const lastPhone = entries[entries.length - 1][1];
-        phone = normalizePhone(lastPhone);
-        console.log(`[MeMude] Using phone from JID cache (last entry): ${phone}`);
-      }
-
-      // --- Strategy 2F: Regex on header text ---
-      if (!phone && header) {
-        const headerText = header.textContent || '';
-        const match = headerText.match(PHONE_PATTERN);
-        if (match) {
-          phone = normalizePhone(match[0]);
-          console.log(`[MeMude] Found phone via header regex: ${phone}`);
+    // --- 5) Último recurso: regex no texto do header (escopo bounded) ---
+    if (!phone && header) {
+      const match = (header.textContent || '').match(PHONE_PATTERN);
+      if (match) {
+        const candidate = normalizePhone(match[0]);
+        if (looksLikePhone(candidate)) {
+          phone = candidate;
+          log.debug(`Phone via header regex: ${phone}`);
         }
       }
     }
 
-    // =====================================================
-    // STEP 3: If header was a phone, try to find name
-    // =====================================================
-    if (phone && !name) {
-      const drawerName = await getNameFromContactDrawer(header);
-      if (drawerName) {
-        name = drawerName;
-        console.log(`[MeMude] Got name from drawer: "${name}"`);
-      }
+    // CLEANUP
+    if (name) name = name.replace(/^~\s*/, '').trim();
+
+    log.debug(`=== Result: name="${name}", phone="${phone}" ===`);
+
+    if (phone || name) {
+      return { error: null, contact: { name: name || '', phone: phone || '', source: 'active-chat' } };
     }
-
-    // =====================================================
-    // CLEANUP: Strip ~ prefix from pushnames
-    // =====================================================
-    if (name) {
-      name = name.replace(/^~\s*/, '').trim();
-    }
-
-    // =====================================================
-    // RESULT
-    // =====================================================
-    console.log(`[MeMude] === Result: name="${name}", phone="${phone}" ===`);
-
-    if (phone) {
-      return {
-        error: null,
-        contact: { name: name || '', phone, source: 'active-chat' }
-      };
-    }
-
-    if (name) {
-      return {
-        error: null,
-        contact: { name, phone: '', source: 'active-chat' }
-      };
-    }
-
     return { error: 'EXTRACTION_FAILED', contact: null };
+  }
+
+  /**
+   * Lê o header e extrai (nome, telefone) sem abrir o drawer.
+   */
+  function readHeader(header) {
+    let name = '', phone = '';
+    const cand = [
+      ...header.querySelectorAll('span[title]'),
+      ...header.querySelectorAll('span[dir="auto"]')
+    ];
+    for (const span of cand) {
+      const val = (span.getAttribute('title') || span.textContent || '').trim();
+      if (!val || val.length < 2) continue;
+      if (looksLikePhone(val)) {
+        if (!phone) phone = normalizePhone(val);
+      } else if (!isWhatsAppUIText(val) && val.length < 80) {
+        if (!name) name = val;
+      }
+      if (name && phone) break;
+    }
+    return { name, phone };
+  }
+
+  /**
+   * Garante um drawer aberto. Marca quando abrimos para fechar depois.
+   */
+  async function ensureDrawer(header) {
+    let drawer = findDrawer();
+    if (drawer) {
+      await waitMs(300);
+      return drawer;
+    }
+    drawer = await openDrawer(header);
+    if (drawer) drawer.__memudeOpenedByUs = true;
+    return drawer;
+  }
+
+  /**
+   * Procura um nome dentro do drawer já aberto.
+   */
+  function extractNameFromDrawerContent(drawer) {
+    const nameSelectors = [
+      '[data-testid="contact-info-subtitle"]',
+      '[data-testid="section-about"] span[dir="auto"]',
+      '[data-testid="business-profile-name"]',
+      'header span[dir="auto"]',
+      'h2 span[dir="auto"]'
+    ];
+    for (const sel of nameSelectors) {
+      const el = drawer.querySelector(sel);
+      if (el) {
+        const text = el.textContent.trim();
+        if (text && text.length > 1 && text.length < 80 && !looksLikePhone(text) && !isWhatsAppUIText(text)) {
+          return text;
+        }
+      }
+    }
+    const spans = drawer.querySelectorAll('span[dir="auto"]');
+    for (const span of spans) {
+      const text = span.textContent.trim();
+      if (!text || text.length < 2 || text.length > 80) continue;
+      if (looksLikePhone(text)) continue;
+      if (isWhatsAppUIText(text)) continue;
+      return text;
+    }
+    return '';
   }
 
   // ============================================================
@@ -451,7 +452,7 @@
     }
 
     if (jidCount.size === 0) {
-      console.log('[MeMude] No JIDs found in message data-id attributes');
+      log.debug('No JIDs found in message data-id attributes');
       return '';
     }
 
@@ -459,7 +460,7 @@
     if (jidCount.size === 1) {
       const num = jidCount.keys().next().value;
       const phone = normalizePhone(num);
-      console.log(`[MeMude] Found phone from message JIDs (single): ${phone}`);
+      log.debug(`Found phone from message JIDs (single): ${phone}`);
       return phone;
     }
 
@@ -473,7 +474,7 @@
         const match = JID_REGEX.exec(dataId);
         if (match) {
           contactPhone = normalizePhone(match[1]);
-          console.log(`[MeMude] Found phone from incoming message JID: ${contactPhone}`);
+          log.debug(`Found phone from incoming message JID: ${contactPhone}`);
           return contactPhone;
         }
       }
@@ -490,104 +491,11 @@
     }
     if (mostFrequent) {
       const phone = normalizePhone(mostFrequent);
-      console.log(`[MeMude] Found phone from message JIDs (most frequent): ${phone}`);
+      log.debug(`Found phone from message JIDs (most frequent): ${phone}`);
       return phone;
     }
 
     return '';
-  }
-
-  // ============================================================
-  // Get phone by opening the contact details drawer
-  // Enhanced for WhatsApp Business profiles
-  // ============================================================
-  async function getPhoneFromContactDrawer(header) {
-    if (!header) return '';
-
-    try {
-      let drawer = findDrawer();
-      const drawerWasAlreadyOpen = !!drawer;
-
-      if (!drawer) {
-        drawer = await openDrawer(header);
-      } else {
-        // Drawer already open, wait for content
-        await waitMs(500);
-      }
-
-      if (!drawer) {
-        console.log('[MeMude] Contact drawer not found after click');
-        return '';
-      }
-
-      console.log('[MeMude] Searching for phone in drawer...');
-
-      // Search for phone number inside the drawer
-      const phone = extractPhoneFromDrawerContent(drawer);
-
-      // Close the drawer if we opened it
-      if (!drawerWasAlreadyOpen) {
-        closeDrawer(drawer);
-      }
-
-      return phone;
-    } catch (err) {
-      console.error('[MeMude] Error opening contact drawer:', err);
-      return '';
-    }
-  }
-
-  // ============================================================
-  // Get name from the contact details drawer (for unsaved contacts)
-  // ============================================================
-  async function getNameFromContactDrawer(header) {
-    if (!header) return '';
-
-    try {
-      let drawer = findDrawer();
-      const drawerWasAlreadyOpen = !!drawer;
-
-      if (!drawer) {
-        drawer = await openDrawer(header);
-      } else {
-        await waitMs(500);
-      }
-
-      if (!drawer) return '';
-
-      const nameSelectors = [
-        '[data-testid="contact-info-subtitle"]',
-        '[data-testid="section-about"] span[dir="auto"]',
-        '[data-testid="business-profile-name"]'
-      ];
-
-      for (const sel of nameSelectors) {
-        const el = drawer.querySelector(sel);
-        if (el) {
-          const text = el.textContent.trim();
-          if (text && text.length > 1 && !looksLikePhone(text) && text.length < 60) {
-            if (!drawerWasAlreadyOpen) closeDrawer(drawer);
-            return text;
-          }
-        }
-      }
-
-      const spans = drawer.querySelectorAll('span[dir="auto"]');
-      for (const span of spans) {
-        const text = span.textContent.trim();
-        if (!text || text.length < 2 || text.length > 60) continue;
-        if (looksLikePhone(text)) continue;
-        if (isWhatsAppUIText(text)) continue;
-        if (!drawerWasAlreadyOpen) closeDrawer(drawer);
-        return text;
-      }
-
-      if (!drawerWasAlreadyOpen) closeDrawer(drawer);
-      return '';
-    } catch (err) {
-      console.error('[MeMude] Error getting name from drawer:', err);
-      return '';
-    }
   }
 
   // ============================================================
@@ -612,7 +520,7 @@
       if (el) {
         const text = el.textContent.trim();
         if (looksLikePhone(text)) {
-          console.log(`[MeMude] Found phone via drawer selector ${sel}: ${text}`);
+          log.debug(`Found phone via drawer selector ${sel}: ${text}`);
           return normalizePhone(text);
         }
       }
@@ -623,7 +531,7 @@
     for (const span of titledSpans) {
       const title = span.getAttribute('title');
       if (title && looksLikePhone(title)) {
-        console.log(`[MeMude] Found phone in drawer span[title]: ${title}`);
+        log.debug(`Found phone in drawer span[title]: ${title}`);
         return normalizePhone(title);
       }
     }
@@ -633,7 +541,7 @@
     for (const span of ltrSpans) {
       const text = span.textContent.trim();
       if (looksLikePhone(text)) {
-        console.log(`[MeMude] Found phone in drawer span[dir=ltr]: ${text}`);
+        log.debug(`Found phone in drawer span[dir=ltr]: ${text}`);
         return normalizePhone(text);
       }
     }
@@ -643,7 +551,7 @@
     for (const span of autoSpans) {
       const text = span.textContent.trim();
       if (looksLikePhone(text)) {
-        console.log(`[MeMude] Found phone in drawer span[dir=auto]: ${text}`);
+        log.debug(`Found phone in drawer span[dir=auto]: ${text}`);
         return normalizePhone(text);
       }
     }
@@ -653,7 +561,7 @@
     for (const area of copyableAreas) {
       const text = area.textContent.trim();
       if (looksLikePhone(text)) {
-        console.log(`[MeMude] Found phone in drawer copyable area: ${text}`);
+        log.debug(`Found phone in drawer copyable area: ${text}`);
         return normalizePhone(text);
       }
     }
@@ -669,22 +577,15 @@
         for (const span of innerSpans) {
           const text = span.textContent.trim();
           if (looksLikePhone(text)) {
-            console.log(`[MeMude] Found phone in labeled section: ${text}`);
+            log.debug(`Found phone in labeled section: ${text}`);
             return normalizePhone(text);
           }
         }
       }
     }
 
-    // 7. Regex on entire drawer text
-    const allText = drawer.textContent || '';
-    const phoneMatch = allText.match(PHONE_PATTERN);
-    if (phoneMatch) {
-      console.log(`[MeMude] Found phone via drawer regex: ${phoneMatch[0]}`);
-      return normalizePhone(phoneMatch[0]);
-    }
-
-    // 8. Check data attributes for JIDs within drawer
+    // 7. Check data attributes for JIDs within drawer
+    //    (regex no textContent inteiro foi removida — pegava "número" da bio/about)
     const jidEls = drawer.querySelectorAll('*');
     for (const el of jidEls) {
       for (const attr of el.attributes) {
@@ -693,14 +594,14 @@
           const match = JID_REGEX.exec(attr.value);
           if (match) {
             const phone = normalizePhone(match[1]);
-            console.log(`[MeMude] Found phone in drawer attr [${attr.name}]: ${phone}`);
+            log.debug(`Found phone in drawer attr [${attr.name}]: ${phone}`);
             return phone;
           }
         }
       }
     }
 
-    console.log('[MeMude] No phone found in drawer content');
+    log.debug('No phone found in drawer content');
     return '';
   }
 
@@ -721,16 +622,16 @@
                     || drawer.querySelector('[data-testid="back-btn"]');
 
       if (closeBtn) {
-        console.log('[MeMude] Closing drawer...');
+        log.debug('Closing drawer...');
         closeBtn.click();
       } else {
-        console.log('[MeMude] No close button found, pressing Escape...');
+        log.debug('No close button found, pressing Escape...');
         document.dispatchEvent(new KeyboardEvent('keydown', {
           key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true
         }));
       }
     } catch (err) {
-      console.error('[MeMude] Error closing drawer:', err);
+      log.error('Error closing drawer:', err);
     }
   }
 
@@ -749,7 +650,7 @@
           const match = JID_REGEX.exec(attr.value);
           if (match) {
             const phone = normalizePhone(match[1]);
-            console.log(`[MeMude] Found phone in data attribute [${attr.name}]: ${phone}`);
+            log.debug(`Found phone in data attribute [${attr.name}]: ${phone}`);
             return phone;
           }
         }
@@ -783,7 +684,7 @@
     if (jidCount.size === 1) {
       const num = jidCount.keys().next().value;
       const phone = normalizePhone(num);
-      console.log(`[MeMude] Found phone from full DOM scan (single JID): ${phone}`);
+      log.debug(`Found phone from full DOM scan (single JID): ${phone}`);
       return phone;
     }
 
@@ -798,7 +699,7 @@
     }
     if (mostFrequent) {
       const phone = normalizePhone(mostFrequent);
-      console.log(`[MeMude] Found phone from full DOM scan (most frequent): ${phone}`);
+      log.debug(`Found phone from full DOM scan (most frequent): ${phone}`);
       return phone;
     }
 

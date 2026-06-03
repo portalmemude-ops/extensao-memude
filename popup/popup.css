@@ -611,6 +611,161 @@ body {
 .toast.info { border-color: rgba(66, 133, 244, 0.3); color: var(--accent-blue); }
 
 /* ============================================================
+   New: header right cluster + daily counter
+   ============================================================ */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.daily-counter {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: rgba(37, 211, 102, 0.1);
+  color: var(--accent-green);
+  border: 1px solid rgba(37, 211, 102, 0.2);
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Advanced fields collapsible */
+.advanced-fields {
+  margin-bottom: 12px;
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px 6px;
+}
+.advanced-fields summary {
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 6px 0;
+  list-style: none;
+}
+.advanced-fields summary::-webkit-details-marker { display: none; }
+.advanced-fields summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 6px;
+  transition: transform 200ms;
+}
+.advanced-fields[open] summary::before { transform: rotate(90deg); }
+
+/* Extra fields on the capture result */
+.extra-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+.extra-fields .form-group { margin-bottom: 0; }
+.extra-fields label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+/* Secondary action links */
+.secondary-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+}
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: var(--transition-fast);
+}
+.btn-link:hover {
+  color: var(--accent-green);
+  background: rgba(37, 211, 102, 0.06);
+}
+
+/* History */
+.card-meta {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.history-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  font-size: 11px;
+}
+.history-item .h-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  flex-shrink: 0;
+}
+.history-item.h-failed .h-status { background: var(--accent-red); }
+.history-item.h-dup .h-status { background: var(--accent-orange); }
+.history-item .h-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.history-item .h-name {
+  color: var(--text-primary);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.history-item .h-phone {
+  color: var(--accent-green);
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 10px;
+}
+.history-item.h-failed .h-phone,
+.history-item.h-dup .h-phone {
+  color: var(--text-secondary);
+}
+.history-item .h-time {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.history-empty {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 14px;
+}
+
+/* ============================================================
    Utilities
    ============================================================ */
 .hidden {

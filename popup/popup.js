@@ -11,9 +11,11 @@ let currentContact = null; // The extracted contact
 
 // ---- Init ----
 async function init() {
-  loadSettings();
+  await loadSettings();
   checkAuthStatus();
   bindEvents();
+  refreshDailyCount();
+  refreshHistorySummary();
 }
 
 // ---- Event Binding ----
@@ -23,7 +25,19 @@ function bindEvents() {
   document.getElementById('btn-extract').addEventListener('click', handleExtract);
   document.getElementById('btn-send-to-sheet').addEventListener('click', handleSendToSheet);
   document.getElementById('sheet-url').addEventListener('input', debounce(validateSheetUrl, 500));
-  
+
+  // Secondary actions
+  const btnTest = document.getElementById('btn-test-sheet');
+  if (btnTest) btnTest.addEventListener('click', handleTestSheet);
+  const btnReset = document.getElementById('btn-reset');
+  if (btnReset) btnReset.addEventListener('click', handleResetSettings);
+
+  // History
+  const histBtn = document.getElementById('btn-toggle-history');
+  if (histBtn) histBtn.addEventListener('click', toggleHistory);
+  const clearBtn = document.getElementById('btn-clear-history');
+  if (clearBtn) clearBtn.addEventListener('click', handleClearHistory);
+
   // Diagnostics
   const diagBtn = document.getElementById('btn-toggle-diag');
   if (diagBtn) {
@@ -31,6 +45,11 @@ function bindEvents() {
       document.getElementById('diagnostic-panel').classList.toggle('hidden');
     });
     document.getElementById('diag-ext-id').textContent = chrome.runtime.id;
+  }
+  const dbgToggle = document.getElementById('diag-debug-toggle');
+  if (dbgToggle) {
+    dbgToggle.checked = Logger.isDebug();
+    dbgToggle.addEventListener('change', (e) => Logger.setDebug(e.target.checked));
   }
 }
 
@@ -55,7 +74,7 @@ async function handleGoogleAuth() {
       throw new Error((resp && resp.error) || 'Não foi possível conectar');
     }
   } catch (err) {
-    console.error('Auth error:', err);
+    Logger.error('Auth error:', err);
     showToast('Erro na autenticação: ' + err.message, 'error');
     const diagError = document.getElementById('diag-last-error');
     if (diagError) diagError.textContent = err.message;
@@ -68,7 +87,7 @@ async function handleGoogleAuth() {
 function checkAuthStatus() {
   chrome.runtime.sendMessage({ action: 'CHECK_AUTH' }, (resp) => {
     if (chrome.runtime.lastError) {
-      console.warn('Auth status check:', chrome.runtime.lastError.message);
+      Logger.warn('Auth status check:', chrome.runtime.lastError.message);
       isAuthenticated = false;
       updateAuthUI(false);
       return;
@@ -100,7 +119,7 @@ function updateAuthUI(connected) {
 }
 
 // ---- Settings ----
-function handleSave() {
+async function handleSave() {
   const url = document.getElementById('sheet-url').value.trim();
   const sheetName = document.getElementById('sheet-name').value.trim();
   const colName = document.getElementById('col-name').value.trim().toUpperCase() || 'A';
@@ -117,7 +136,17 @@ function handleSave() {
     return;
   }
 
-  const add9thDigit = document.getElementById('add-9th-digit').checked;
+  const cols = [colName, colPhone];
+  for (const id of ['col-status', 'col-source', 'col-notes', 'col-timestamp']) {
+    const v = document.getElementById(id).value.trim().toUpperCase();
+    if (v) {
+      if (cols.includes(v)) {
+        showToast(`Coluna ${v} repetida — escolha letras diferentes`, 'error');
+        return;
+      }
+      cols.push(v);
+    }
+  }
 
   const settings = {
     sheetUrl: url,
@@ -125,27 +154,72 @@ function handleSave() {
     sheetName,
     colName,
     colPhone,
-    add9thDigit
+    colStatus: document.getElementById('col-status').value.trim().toUpperCase(),
+    colSource: document.getElementById('col-source').value.trim().toUpperCase(),
+    colNotes: document.getElementById('col-notes').value.trim().toUpperCase(),
+    colTimestamp: document.getElementById('col-timestamp').value.trim().toUpperCase(),
+    defaultStatus: document.getElementById('default-status').value.trim(),
+    defaultSource: document.getElementById('default-source').value.trim(),
+    add9thDigit: document.getElementById('add-9th-digit').checked,
+    autoSendOnCapture: document.getElementById('auto-send').checked
   };
 
-  chrome.storage.sync.set({ memude_settings: settings }, () => {
-    showToast('Configurações salvas!', 'success');
-  });
+  await Settings.saveSettings(settings);
+  showToast('Configurações salvas!', 'success');
 }
 
-function loadSettings() {
-  chrome.storage.sync.get('memude_settings', (data) => {
-    const s = data.memude_settings;
-    if (!s) return;
+async function loadSettings() {
+  const s = await Settings.getSettings();
+  document.getElementById('sheet-url').value = s.sheetUrl || '';
+  document.getElementById('sheet-name').value = s.sheetName || '';
+  document.getElementById('col-name').value = s.colName || 'A';
+  document.getElementById('col-phone').value = s.colPhone || 'B';
+  document.getElementById('col-status').value = s.colStatus || '';
+  document.getElementById('col-source').value = s.colSource || '';
+  document.getElementById('col-notes').value = s.colNotes || '';
+  document.getElementById('col-timestamp').value = s.colTimestamp || '';
+  document.getElementById('default-status').value = s.defaultStatus || '';
+  document.getElementById('default-source').value = s.defaultSource || '';
+  document.getElementById('add-9th-digit').checked = !!s.add9thDigit;
+  document.getElementById('auto-send').checked = !!s.autoSendOnCapture;
+  // Pre-popular os campos da captura com os defaults
+  document.getElementById('field-status').placeholder = s.defaultStatus || 'Novo';
+  document.getElementById('field-source').placeholder = s.defaultSource || 'WhatsApp';
+  if (s.sheetUrl) validateSheetUrl();
+}
 
-    document.getElementById('sheet-url').value = s.sheetUrl || '';
-    document.getElementById('sheet-name').value = s.sheetName || '';
-    document.getElementById('col-name').value = s.colName || 'A';
-    document.getElementById('col-phone').value = s.colPhone || 'B';
-    document.getElementById('add-9th-digit').checked = !!s.add9thDigit;
+async function handleResetSettings() {
+  if (!confirm('Restaurar a configuração padrão da equipe? Suas personalizações serão perdidas.')) return;
+  await Settings.resetToTeamDefaults();
+  await loadSettings();
+  showToast('Padrão da equipe restaurado', 'success');
+}
 
-    if (s.sheetUrl) validateSheetUrl();
-  });
+async function handleTestSheet() {
+  const s = await Settings.getSettings();
+  if (!s.spreadsheetId) {
+    showToast('Configure a URL da planilha primeiro', 'error');
+    return;
+  }
+  const btn = document.getElementById('btn-test-sheet');
+  btn.disabled = true;
+  btn.textContent = 'Testando...';
+  try {
+    const resp = await chrome.runtime.sendMessage({
+      action: 'TEST_SHEET_CONNECTION',
+      data: { spreadsheetId: s.spreadsheetId }
+    });
+    if (resp && resp.success) {
+      showToast(`✓ Conectado a "${resp.title}"`, 'success');
+    } else {
+      throw new Error((resp && resp.error) || 'Falha desconhecida');
+    }
+  } catch (err) {
+    showToast('Falha: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Testar planilha';
+  }
 }
 
 // ---- Sheet URL Validation ----
@@ -199,10 +273,16 @@ async function handleExtract() {
       response = await chrome.tabs.sendMessage(tab.id, { action: 'EXTRACT_ACTIVE_CONTACT' });
     } catch (connErr) {
       // Content script not yet loaded — inject it manually
-      console.log('[MeMude] Content script not loaded, injecting...');
+      Logger.debug('Content script not loaded, injecting...');
       await chrome.scripting.executeScript({
         target: { tabId: tab.id },
-        files: ['utils/phone-extractor.js', 'content/content.js']
+        files: [
+          'utils/logger.js',
+          'utils/phone-utils.js',
+          'utils/phone-extractor.js',
+          'content/overlay.js',
+          'content/content.js'
+        ]
       });
 
       // Wait a moment for scripts to initialize
@@ -247,13 +327,11 @@ async function handleExtract() {
     // Show the extracted contact
     currentContact = contact;
 
-    // Clean ~ prefix from pushnames (WhatsApp profile names)
     if (currentContact.name) {
       currentContact.name = currentContact.name.replace(/^~\s*/, '').trim();
     }
 
-    // Apply 9th digit if setting is enabled
-    const settings = await getSettings();
+    const settings = await Settings.getSettings();
     if (settings && settings.add9thDigit && currentContact.phone) {
       currentContact.phone = apply9thDigit(currentContact.phone);
     }
@@ -261,8 +339,13 @@ async function handleExtract() {
     showResult(currentContact);
     showToast('Contato capturado!', 'success');
 
+    // F2: envio automático se a setting estiver ligada
+    if (settings.autoSendOnCapture && currentContact.phone) {
+      await handleSendToSheet();
+    }
+
   } catch (err) {
-    console.error('Extract error:', err);
+    Logger.error('Extract error:', err);
     showToast('Erro: ' + err.message, 'error');
   } finally {
     btn.classList.remove('loading');
@@ -284,7 +367,15 @@ async function handleSendToSheet() {
     return;
   }
 
-  const settings = await getSettings();
+  // Mescla campos editados no popup ao contato corrente
+  const editStatus = document.getElementById('field-status').value.trim();
+  const editSource = document.getElementById('field-source').value.trim();
+  const editNotes = document.getElementById('field-notes').value.trim();
+  if (editStatus) currentContact.status = editStatus;
+  if (editSource) currentContact.source = editSource;
+  if (editNotes) currentContact.notes = editNotes;
+
+  const settings = await Settings.getSettings();
   if (!settings || !settings.spreadsheetId) {
     showToast('Configure a planilha primeiro', 'error');
     return;
@@ -329,17 +420,21 @@ async function handleSendToSheet() {
         showToast('Contato exportado com sucesso!', 'success');
       }
 
+      refreshDailyCount();
+      refreshHistorySummary();
+
       // Reset after a moment
       setTimeout(() => {
         document.getElementById('progress-container').classList.add('hidden');
         updateProgress(0, '');
+        hideResult();
       }, 2500);
     } else {
       throw new Error(exportResult.error || 'Erro ao exportar');
     }
 
   } catch (err) {
-    console.error('Export error:', err);
+    Logger.error('Export error:', err);
     updateProgress(100, 'Erro: ' + err.message);
     showToast('Erro: ' + err.message, 'error');
 
@@ -364,6 +459,9 @@ function showResult(contact) {
 
 function hideResult() {
   document.getElementById('extract-result').classList.add('hidden');
+  document.getElementById('field-status').value = '';
+  document.getElementById('field-source').value = '';
+  document.getElementById('field-notes').value = '';
   currentContact = null;
 }
 
@@ -372,12 +470,65 @@ function updateProgress(percent, text) {
   document.getElementById('progress-text').textContent = text;
 }
 
-function getSettings() {
-  return new Promise((resolve) => {
-    chrome.storage.sync.get('memude_settings', (data) => {
-      resolve(data.memude_settings || null);
-    });
-  });
+async function refreshDailyCount() {
+  try {
+    const n = await History.dailyCount();
+    document.getElementById('daily-count-value').textContent = n;
+  } catch (e) { /* ignore */ }
+}
+
+async function refreshHistorySummary() {
+  try {
+    const items = await History.list(50);
+    const summaryEl = document.getElementById('history-summary');
+    if (summaryEl) summaryEl.textContent = items.length ? `${items.length} registros` : '';
+    const list = document.getElementById('history-list');
+    if (!list) return;
+    if (!items.length) {
+      list.innerHTML = '<li class="history-empty">Nenhum lead capturado ainda</li>';
+      return;
+    }
+    list.innerHTML = items.slice(0, 20).map(it => {
+      const cls = !it.exported ? (it.duplicate ? 'h-dup' : 'h-failed') : '';
+      const when = formatTime(it.ts);
+      return `<li class="history-item ${cls}">
+        <span class="h-status"></span>
+        <div class="h-info">
+          <span class="h-name">${escapeHtml(it.name || '(sem nome)')}</span>
+          <span class="h-phone">${escapeHtml(it.phone || '')}</span>
+        </div>
+        <span class="h-time">${when}</span>
+      </li>`;
+    }).join('');
+  } catch (e) { /* ignore */ }
+}
+
+function toggleHistory() {
+  const panel = document.getElementById('history-panel');
+  if (!panel) return;
+  panel.classList.toggle('hidden');
+  if (!panel.classList.contains('hidden')) refreshHistorySummary();
+}
+
+async function handleClearHistory() {
+  if (!confirm('Apagar todo o histórico local? Isso não afeta a planilha.')) return;
+  await History.clear();
+  refreshDailyCount();
+  refreshHistorySummary();
+  showToast('Histórico limpo', 'success');
+}
+
+function formatTime(ts) {
+  const d = new Date(ts);
+  const today = new Date();
+  const sameDay = d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
+  return sameDay
+    ? d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 }
 
 function showToast(message, type = 'info') {
@@ -408,30 +559,5 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-/**
- * Add the 9th digit to Brazilian mobile numbers missing it.
- * +55XX8XXXXXXX → +55XX98XXXXXXX
- */
-function apply9thDigit(phone) {
-  if (!phone) return phone;
-  // Handle +55XXXXXXXXXXX (with +)
-  let match = phone.match(/^\+55(\d{2})(\d{8})$/);
-  if (match) {
-    const ddd = match[1];
-    const local = match[2];
-    if (!local.startsWith('9')) {
-      return `+55${ddd}9${local}`;
-    }
-    return phone;
-  }
-  // Handle 55XXXXXXXXXXX (without +)
-  match = phone.match(/^55(\d{2})(\d{8})$/);
-  if (match) {
-    const ddd = match[1];
-    const local = match[2];
-    if (!local.startsWith('9')) {
-      return `55${ddd}9${local}`;
-    }
-  }
-  return phone;
-}
+// 9º dígito vem de PhoneUtils.add9thDigit (utils/phone-utils.js)
+const apply9thDigit = (phone) => PhoneUtils.add9thDigit(phone);

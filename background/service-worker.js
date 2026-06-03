@@ -3,7 +3,14 @@
    Handles Google Sheets API calls, auth and message routing
    ============================================================ */
 
-importScripts('/utils/auth.js', '/utils/sheets-api.js');
+importScripts(
+  '/utils/logger.js',
+  '/utils/phone-utils.js',
+  '/utils/settings.js',
+  '/utils/history.js',
+  '/utils/auth.js',
+  '/utils/sheets-api.js'
+);
 
 // ============================================================
 // Message Handler
@@ -30,7 +37,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
 
     case 'CHECK_AUTH':
-      AUTH.hasValidToken()
+      AUTH.validateLive()
         .then(connected => sendResponse({ success: true, connected }))
         .catch(() => sendResponse({ success: true, connected: false }));
       return true;
@@ -38,6 +45,42 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     case 'LOGOUT':
       AUTH.logout()
         .then(() => sendResponse({ success: true }))
+        .catch(err => sendResponse({ success: false, error: err.message }));
+      return true;
+
+    case 'GET_SETTINGS':
+      Settings.getSettings()
+        .then(s => sendResponse({ success: true, settings: s }))
+        .catch(err => sendResponse({ success: false, error: err.message }));
+      return true;
+
+    case 'SAVE_SETTINGS':
+      Settings.saveSettings(request.settings || {})
+        .then(s => sendResponse({ success: true, settings: s }))
+        .catch(err => sendResponse({ success: false, error: err.message }));
+      return true;
+
+    case 'RESET_SETTINGS':
+      Settings.resetToTeamDefaults()
+        .then(s => sendResponse({ success: true, settings: s }))
+        .catch(err => sendResponse({ success: false, error: err.message }));
+      return true;
+
+    case 'GET_HISTORY':
+      History.list(request.limit || 50)
+        .then(items => sendResponse({ success: true, items }))
+        .catch(err => sendResponse({ success: false, error: err.message }));
+      return true;
+
+    case 'CLEAR_HISTORY':
+      History.clear()
+        .then(() => sendResponse({ success: true }))
+        .catch(err => sendResponse({ success: false, error: err.message }));
+      return true;
+
+    case 'GET_DAILY_COUNT':
+      History.dailyCount()
+        .then(count => sendResponse({ success: true, count }))
         .catch(err => sendResponse({ success: false, error: err.message }));
       return true;
 
@@ -63,7 +106,7 @@ async function handleExport(data) {
     return { success: false, error: 'Nenhum contato para exportar' };
   }
 
-  const settings = await getSettings();
+  const settings = await Settings.getSettings();
   if (!settings || !settings.spreadsheetId) {
     return { success: false, error: 'Configure a planilha na extensão primeiro' };
   }
@@ -86,39 +129,73 @@ async function handleExport(data) {
 }
 
 /**
- * Deduplica e grava os contatos na planilha.
+ * Deduplica, grava na planilha e atualiza o histórico.
  */
 async function writeContacts(contacts, settings, token) {
-  const existingPhones = await SheetsAPI.getExistingPhones(
-    settings.spreadsheetId,
-    settings.sheetName,
-    settings.colPhone,
-    token
-  );
+  // Aplica defaults da equipe nos campos opcionais
+  const enriched = contacts.map(c => ({
+    name: c.name || '',
+    phone: c.phone || '',
+    status: c.status || settings.defaultStatus || '',
+    source: c.source || settings.defaultSource || '',
+    notes: c.notes || '',
+    timestamp: c.timestamp || new Date().toLocaleString('pt-BR')
+  }));
 
-  // Filter out duplicates (canonical key tolerates the optional 9th digit)
-  const newContacts = contacts.filter(c => {
-    const key = SheetsAPI.phoneKey(c.phone);
-    return !existingPhones.has(key);
+  // Aplica 9º dígito se a setting estiver ligada
+  if (settings.add9thDigit) {
+    for (const c of enriched) c.phone = PhoneUtils.add9thDigit(c.phone);
+  }
+
+  // Carrega chaves já existentes na planilha + no histórico local
+  const [remote, localKeys] = await Promise.all([
+    SheetsAPI.getExistingPhones(settings.spreadsheetId, settings.sheetName, settings.colPhone, token),
+    History.localPhoneKeys()
+  ]);
+  const seen = new Set([...remote, ...localKeys]);
+
+  const newContacts = enriched.filter(c => {
+    const key = PhoneUtils.phoneKey(c.phone);
+    return key && !seen.has(key);
   });
+  const duplicated = enriched.length - newContacts.length;
 
   if (newContacts.length === 0) {
+    // Mesmo assim registra a tentativa no histórico
+    await History.addBulk(enriched.map(c => ({ ...c, exported: false, duplicate: true })));
     return {
       success: true,
       exported: 0,
+      duplicated,
       errors: 0,
       message: 'Todos os contatos já existem na planilha'
     };
   }
 
-  return SheetsAPI.appendContacts(
+  const cols = {
+    name: settings.colName,
+    phone: settings.colPhone,
+    status: settings.colStatus,
+    source: settings.colSource,
+    notes: settings.colNotes,
+    timestamp: settings.colTimestamp
+  };
+
+  const result = await SheetsAPI.appendContacts(
     settings.spreadsheetId,
     settings.sheetName,
-    settings.colName,
-    settings.colPhone,
+    cols,
     newContacts,
     token
   );
+
+  if (result.success) {
+    await History.addBulk(newContacts.map(c => ({ ...c, exported: true })), settings.historyLimit);
+    result.duplicated = duplicated;
+  } else {
+    await History.addBulk(newContacts.map(c => ({ ...c, exported: false, error: result.error })));
+  }
+  return result;
 }
 
 function isAuthError(error) {
@@ -138,16 +215,38 @@ async function handleTestConnection(data) {
 }
 
 // ============================================================
-// Storage Utilities
+// Atalhos de teclado (chrome.commands)
 // ============================================================
-
-function getSettings() {
-  return new Promise((resolve) => {
-    chrome.storage.sync.get('memude_settings', (data) => {
-      resolve(data.memude_settings || null);
-    });
-  });
-}
+chrome.commands.onCommand.addListener(async (command) => {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab || !tab.url || !tab.url.includes('web.whatsapp.com')) {
+      // Sem WhatsApp aberto — abre uma aba
+      chrome.tabs.create({ url: 'https://web.whatsapp.com/' });
+      return;
+    }
+    const action = command === 'open-overlay' ? 'OVERLAY_OPEN' : 'RUN_QUICK_CAPTURE';
+    try {
+      await chrome.tabs.sendMessage(tab.id, { action });
+    } catch (e) {
+      // Content script não carregou — injeta e tenta de novo
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: [
+          'utils/logger.js',
+          'utils/phone-utils.js',
+          'utils/phone-extractor.js',
+          'content/overlay.js',
+          'content/content.js'
+        ]
+      });
+      await new Promise(r => setTimeout(r, 1500));
+      await chrome.tabs.sendMessage(tab.id, { action });
+    }
+  } catch (err) {
+    Logger.error('command failed', command, err);
+  }
+});
 
 // ============================================================
 // Installation Handler
@@ -155,17 +254,7 @@ function getSettings() {
 
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
-    console.log('[MeMude] Extension installed');
-
-    chrome.storage.sync.set({
-      memude_settings: {
-        sheetUrl: '',
-        spreadsheetId: '',
-        sheetName: '',
-        colName: 'A',
-        colPhone: 'B',
-        add9thDigit: false
-      }
-    });
+    Logger.warn('Extension installed — applying team defaults');
+    Settings.resetToTeamDefaults();
   }
 });

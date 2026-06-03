@@ -18,28 +18,11 @@ const SheetsAPI = {
   },
 
   /**
-   * Build a canonical key for a phone number so that the SAME contact is
-   * recognized as a duplicate regardless of formatting OR the optional
-   * Brazilian 9th digit. Both "+55 85 8532-3726" and "+55 85 98532-3726"
-   * collapse to the same 12-digit key.
-   * @param {string} raw
-   * @returns {string} digits-only canonical key (empty if invalid)
+   * Chave canônica de telefone. Delega para PhoneUtils.phoneKey.
+   * Mantido como atalho para callers existentes (SheetsAPI.phoneKey).
    */
   phoneKey(raw) {
-    if (!raw) return '';
-    let d = raw.toString().replace(/\D/g, '');
-    if (!d) return '';
-    // Local BR number without country code → prefix 55
-    if (d.length === 10 || d.length === 11) d = '55' + d;
-    // BR mobile WITH 9th digit (55 + DDD(2) + 9 + 8 = 13) → drop the leading 9
-    if (d.length === 13 && d.startsWith('55')) {
-      const ddd = d.substring(2, 4);
-      const local = d.substring(4); // 9 digits
-      if (local.startsWith('9')) {
-        d = '55' + ddd + local.substring(1); // → 12 digits, sem o 9
-      }
-    }
-    return d;
+    return (typeof PhoneUtils !== 'undefined' ? PhoneUtils.phoneKey(raw) : String(raw || '').replace(/\D/g, ''));
   },
 
   /**
@@ -54,6 +37,21 @@ const SheetsAPI = {
       index = index * 26 + (col.charCodeAt(i) - 64);
     }
     return index - 1;
+  },
+
+  /**
+   * Converte índice 0-based em letra(s) de coluna (0->A, 25->Z, 26->AA).
+   */
+  _indexToColLetter(idx) {
+    if (idx < 0) return 'A';
+    let s = '';
+    let n = idx;
+    while (true) {
+      s = String.fromCharCode(65 + (n % 26)) + s;
+      n = Math.floor(n / 26) - 1;
+      if (n < 0) break;
+    }
+    return s;
   },
 
   /**
@@ -109,28 +107,44 @@ const SheetsAPI = {
    * Append contacts as rows to the spreadsheet
    * @param {string} spreadsheetId
    * @param {string} sheetName - Tab name
-   * @param {string} colName - Column letter for Name
-   * @param {string} colPhone - Column letter for Phone
-   * @param {Array<{name: string, phone: string}>} contacts
+   * @param {object} cols - mapa de colunas: { name, phone, status?, source?, notes?, timestamp? }
+   *                       colunas vazias/null não são gravadas.
+   * @param {Array<{name: string, phone: string, status?: string, source?: string, notes?: string, timestamp?: string}>} contacts
    * @param {string} token - OAuth access token
    * @returns {Promise<{success: boolean, exported?: number, errors?: number, error?: string}>}
    */
-  async appendContacts(spreadsheetId, sheetName, colName, colPhone, contacts, token) {
+  async appendContacts(spreadsheetId, sheetName, cols, contacts, token) {
     try {
-      const nameIdx = this.colLetterToIndex(colName);
-      const phoneIdx = this.colLetterToIndex(colPhone);
-      const maxIdx = Math.max(nameIdx, phoneIdx);
+      // Mapa de campo -> índice da coluna (somente colunas configuradas)
+      const fieldIdx = {};
+      let maxIdx = -1;
+      for (const field of ['name', 'phone', 'status', 'source', 'notes', 'timestamp']) {
+        const letter = (cols && cols[field]) ? String(cols[field]).trim() : '';
+        if (letter) {
+          const idx = this.colLetterToIndex(letter);
+          if (idx >= 0) {
+            fieldIdx[field] = idx;
+            if (idx > maxIdx) maxIdx = idx;
+          }
+        }
+      }
+      if (fieldIdx.name === undefined && fieldIdx.phone === undefined) {
+        return { success: false, error: 'Configure ao menos a coluna do Nome ou do Telefone' };
+      }
 
-      // Build rows: each row is an array where name and phone are at the right indices
+      // Constrói as linhas
       const rows = contacts.map(contact => {
         const row = new Array(maxIdx + 1).fill('');
-        row[nameIdx] = contact.name || '';
-        row[phoneIdx] = contact.phone || '';
+        for (const [field, idx] of Object.entries(fieldIdx)) {
+          row[idx] = contact[field] != null ? contact[field] : '';
+        }
         return row;
       });
 
-      // Build range
-      const range = this.buildRange(sheetName, colName, colPhone);
+      // Range: do menor letter ao maior. Calcula a partir de fieldIdx.
+      const minLetter = this._indexToColLetter(Math.min(...Object.values(fieldIdx)));
+      const maxLetter = this._indexToColLetter(maxIdx);
+      const range = sheetName ? `'${sheetName}'!${minLetter}:${maxLetter}` : `${minLetter}:${maxLetter}`;
 
       // API request - append values
       const url = `${this.BASE_URL}/${spreadsheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS&includeValuesInResponse=false`;

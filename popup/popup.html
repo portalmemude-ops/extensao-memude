@@ -21,9 +21,17 @@
           <span class="subtitle">WhatsApp → Sheets</span>
         </div>
       </div>
-      <div id="auth-status" class="status-badge disconnected">
-        <span class="status-dot"></span>
-        <span class="status-text">Desconectado</span>
+      <div class="header-right">
+        <div id="daily-counter" class="daily-counter" title="Leads enviados hoje">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V5a2 2 0 0 0-2-2zm0 16H5V8h14v11z" fill="currentColor"/>
+          </svg>
+          <span id="daily-count-value">0</span>
+        </div>
+        <div id="auth-status" class="status-badge disconnected">
+          <span class="status-dot"></span>
+          <span class="status-text">Desconectado</span>
+        </div>
       </div>
     </header>
 
@@ -60,6 +68,30 @@
               <span id="result-phone" class="result-phone">—</span>
             </div>
           </div>
+
+          <div class="extra-fields">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="field-status">Status</label>
+                <div class="input-wrapper">
+                  <input type="text" id="field-status" placeholder="Novo" autocomplete="off">
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="field-source">Origem</label>
+                <div class="input-wrapper">
+                  <input type="text" id="field-source" placeholder="WhatsApp" autocomplete="off">
+                </div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="field-notes">Observação</label>
+              <div class="input-wrapper">
+                <input type="text" id="field-notes" placeholder="Anotação rápida (opcional)" autocomplete="off">
+              </div>
+            </div>
+          </div>
+
           <button id="btn-send-to-sheet" class="btn btn-save">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
               <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" fill="currentColor"/>
@@ -141,6 +173,52 @@
           </div>
         </div>
 
+        <details class="advanced-fields">
+          <summary>Campos extras (opcional)</summary>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="col-status">Col. Status</label>
+              <div class="input-wrapper">
+                <input type="text" id="col-status" placeholder="C" maxlength="3" autocomplete="off">
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="col-source">Col. Origem</label>
+              <div class="input-wrapper">
+                <input type="text" id="col-source" placeholder="D" maxlength="3" autocomplete="off">
+              </div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="col-notes">Col. Observação</label>
+              <div class="input-wrapper">
+                <input type="text" id="col-notes" placeholder="E" maxlength="3" autocomplete="off">
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="col-timestamp">Col. Data/Hora</label>
+              <div class="input-wrapper">
+                <input type="text" id="col-timestamp" placeholder="F" maxlength="3" autocomplete="off">
+              </div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="default-status">Status padrão</label>
+              <div class="input-wrapper">
+                <input type="text" id="default-status" placeholder="Novo" autocomplete="off">
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="default-source">Origem padrão</label>
+              <div class="input-wrapper">
+                <input type="text" id="default-source" placeholder="WhatsApp" autocomplete="off">
+              </div>
+            </div>
+          </div>
+        </details>
+
         <div class="form-group toggle-group">
           <label class="toggle-label" for="add-9th-digit">
             <div class="toggle-wrapper">
@@ -154,12 +232,45 @@
           </label>
         </div>
 
+        <div class="form-group toggle-group">
+          <label class="toggle-label" for="auto-send">
+            <div class="toggle-wrapper">
+              <input type="checkbox" id="auto-send" class="toggle-input">
+              <span class="toggle-slider"></span>
+            </div>
+            <div class="toggle-text">
+              <span class="toggle-title">Enviar automaticamente ao capturar</span>
+              <span class="toggle-desc">Captura + envia em um clique (sem revisar antes)</span>
+            </div>
+          </label>
+        </div>
+
         <button id="btn-save" class="btn btn-save">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
             <path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z" fill="currentColor"/>
           </svg>
           <span>Salvar Configurações</span>
         </button>
+
+        <div class="secondary-actions">
+          <button id="btn-test-sheet" class="btn-link" type="button">Testar planilha</button>
+          <button id="btn-reset" class="btn-link" type="button">Restaurar padrão da equipe</button>
+        </div>
+      </section>
+
+      <!-- History -->
+      <section class="card config-card history-card">
+        <div class="card-header" style="cursor: pointer;" id="btn-toggle-history">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.94 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18z" fill="currentColor"/>
+          </svg>
+          <h2>Histórico</h2>
+          <span class="card-meta" id="history-summary"></span>
+        </div>
+        <div id="history-panel" class="hidden">
+          <ul id="history-list" class="history-list"></ul>
+          <button id="btn-clear-history" class="btn-link" type="button">Limpar histórico</button>
+        </div>
       </section>
 
       <!-- Diagnostics -->
@@ -173,6 +284,11 @@
         <div id="diagnostic-panel" class="hidden" style="margin-top: 10px; font-size: 11px; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px;">
           <div><strong>Extension ID:</strong> <span id="diag-ext-id"></span></div>
           <div><strong>Último Erro:</strong> <span id="diag-last-error">Nenhum</span></div>
+          <div style="margin-top: 6px;">
+            <label style="display: inline-flex; gap: 6px; align-items: center; cursor: pointer;">
+              <input type="checkbox" id="diag-debug-toggle"> Logs detalhados no Console (F12)
+            </label>
+          </div>
         </div>
       </section>
     </main>
@@ -184,6 +300,10 @@
     </div>
   </div>
 
+  <script src="../utils/logger.js"></script>
+  <script src="../utils/phone-utils.js"></script>
+  <script src="../utils/settings.js"></script>
+  <script src="../utils/history.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

@@ -11,6 +11,8 @@
   line-height: 1.5;
 }
 
+#memude-overlay .hidden { display: none !important; }
+
 /* ---- Floating Action Button ---- */
 .memude-fab {
   position: fixed;
