@@ -48,8 +48,8 @@
     },
     "open-overlay": {
       "suggested_key": {
-        "default": "Ctrl+Shift+M",
-        "mac": "Command+Shift+M"
+        "default": "Alt+Shift+M",
+        "mac": "Command+Shift+Y"
       },
       "description": "Abrir o painel MeMude no WhatsApp"
     }

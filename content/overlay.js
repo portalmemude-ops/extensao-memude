@@ -7,6 +7,11 @@
 (function () {
   'use strict';
 
+  // Guard global — impede listeners/timers duplicados caso o script
+  // seja reinjetado.
+  if (window.__MEMUDE_OVERLAY_LOADED) return;
+  window.__MEMUDE_OVERLAY_LOADED = true;
+
   const log = (typeof Logger !== 'undefined')
     ? Logger
     : { debug() {}, info() {}, warn: (...a) => console.warn(...a), error: (...a) => console.error(...a) };
@@ -316,7 +321,17 @@
   function loadStaged() {
     return new Promise((resolve) => {
       chrome.storage.local.get(STAGE_KEY, (data) => {
-        staged = Array.isArray(data[STAGE_KEY]) ? data[STAGE_KEY] : [];
+        const raw = Array.isArray(data[STAGE_KEY]) ? data[STAGE_KEY] : [];
+        // Sanitiza: entradas antigas podem não ter `key` — recalcula
+        staged = raw.filter(c => c && c.phone).map(c => ({
+          name: c.name || '',
+          phone: c.phone,
+          status: c.status || '',
+          source: c.source || '',
+          notes: c.notes || '',
+          key: c.key || (PU ? PU.phoneKey(c.phone) : c.phone.replace(/\D/g, '')),
+          selected: c.selected !== false
+        }));
         resolve();
       });
     });

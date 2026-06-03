@@ -243,7 +243,6 @@ body {
 .input-wrapper input {
   width: 100%;
   padding: 10px 14px;
-  padding-right: 38px;
   background: rgba(0, 0, 0, 0.3);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
@@ -252,6 +251,11 @@ body {
   font-size: 13px;
   transition: var(--transition-fast);
   outline: none;
+}
+
+/* Só reserva espaço para o ícone quando há um */
+.input-wrapper:has(.input-icon) input {
+  padding-right: 38px;
 }
 
 .input-wrapper input:focus {

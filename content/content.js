@@ -7,13 +7,19 @@
 (function () {
   'use strict';
 
+  // Guard global — impede listener duplicado caso o script seja
+  // reinjetado (chrome.scripting.executeScript) por cima da carga
+  // automática do manifest.
+  if (window.__MEMUDE_CONTENT_LOADED) return;
+  window.__MEMUDE_CONTENT_LOADED = true;
+
   let initialized = false;
 
   function init() {
     if (initialized) return;
     initialized = true;
 
-    console.log('[MeMude] Content script loaded on WhatsApp Web');
+    if (typeof Logger !== 'undefined') Logger.debug('Content script loaded on WhatsApp Web');
 
     // Start network interceptor (from phone-extractor.js)
     if (window.__MEMUDE_EXTRACTOR) {
@@ -39,7 +45,7 @@
       extractor.extractActiveContact()
         .then(result => sendResponse(result))
         .catch(err => {
-          console.error('[MeMude] Extraction error:', err);
+          if (typeof Logger !== 'undefined') Logger.error('Extraction error:', err); else console.error('[MeMude] Extraction error:', err);
           sendResponse({ error: err.message, contact: null });
         });
       return true; // Keep channel open for async response

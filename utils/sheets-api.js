@@ -226,7 +226,8 @@ const SheetsAPI = {
 
       return phones;
     } catch (err) {
-      console.error('[MeMude] Error reading existing phones:', err);
+      if (typeof Logger !== 'undefined') Logger.error('Error reading existing phones:', err);
+      else console.error('[MeMude] Error reading existing phones:', err);
       return new Set();
     }
   }
