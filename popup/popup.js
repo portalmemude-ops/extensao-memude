@@ -39,22 +39,20 @@ async function handleGoogleAuth() {
   const btn = document.getElementById('btn-google-auth');
   btn.classList.add('loading');
   btn.disabled = true;
+  showToast('Abrindo login do Google...', 'info');
 
   try {
-    const token = await new Promise((resolve, reject) => {
-      chrome.identity.getAuthToken({ interactive: true }, (token) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-        } else {
-          resolve(token);
-        }
-      });
-    });
+    // O login roda no service worker (launchWebAuthFlow). A janela do Google
+    // pode fechar este popup; se isso acontecer, ao reabrir a extensão o
+    // status já aparecerá como "Conectado".
+    const resp = await chrome.runtime.sendMessage({ action: 'GET_AUTH_TOKEN', interactive: true });
 
-    if (token) {
+    if (resp && resp.success && resp.token) {
       isAuthenticated = true;
       updateAuthUI(true);
       showToast('Conectado ao Google com sucesso!', 'success');
+    } else {
+      throw new Error((resp && resp.error) || 'Não foi possível conectar');
     }
   } catch (err) {
     console.error('Auth error:', err);
@@ -68,17 +66,16 @@ async function handleGoogleAuth() {
 }
 
 function checkAuthStatus() {
-  chrome.identity.getAuthToken({ interactive: false }, (token) => {
+  chrome.runtime.sendMessage({ action: 'CHECK_AUTH' }, (resp) => {
     if (chrome.runtime.lastError) {
       console.warn('Auth status check:', chrome.runtime.lastError.message);
       isAuthenticated = false;
       updateAuthUI(false);
       return;
     }
-    if (token) {
-      isAuthenticated = true;
-      updateAuthUI(true);
-    }
+    const connected = !!(resp && resp.connected);
+    isAuthenticated = connected;
+    updateAuthUI(connected);
   });
 }
 
@@ -304,53 +301,33 @@ async function handleSendToSheet() {
 
   // Show progress
   document.getElementById('progress-container').classList.remove('hidden');
-  updateProgress(30, 'Enviando para a planilha...');
+  updateProgress(40, 'Enviando para a planilha...');
 
   try {
-    // Get auth token
-    const token = await new Promise((resolve, reject) => {
-      chrome.identity.getAuthToken({ interactive: false }, (token) => {
-        if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
-        else resolve(token);
-      });
-    });
-
-    updateProgress(60, 'Gravando dados...');
-
-    // Send to Google Sheets via background
-    let exportResult = await chrome.runtime.sendMessage({
+    // O token é obtido pelo próprio service worker
+    const exportResult = await chrome.runtime.sendMessage({
       action: 'EXPORT_TO_SHEETS',
-      data: {
-        contacts: [currentContact],
-        settings,
-        token
-      }
+      data: { contacts: [currentContact] }
     });
 
     if (!exportResult) {
       throw new Error('Sem resposta do serviço da extensão. Recarregue a extensão e tente novamente.');
     }
 
-    if (!exportResult.success && String(exportResult.error).includes('401')) {
-      updateProgress(70, 'Renovando autenticação...');
-      await chrome.runtime.sendMessage({ action: 'REMOVE_CACHED_TOKEN', token });
-      
-      const newToken = await new Promise((resolve, reject) => {
-        chrome.identity.getAuthToken({ interactive: true }, (t) => {
-          if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
-          else resolve(t);
-        });
-      });
-
-      exportResult = await chrome.runtime.sendMessage({
-        action: 'EXPORT_TO_SHEETS',
-        data: { contacts: [currentContact], settings, token: newToken }
-      });
+    if (!exportResult.success && exportResult.code === 'NEEDS_AUTH') {
+      isAuthenticated = false;
+      updateAuthUI(false);
+      throw new Error('Sessão do Google expirou. Clique em "Conectar Google" e tente de novo.');
     }
 
     if (exportResult.success) {
-      updateProgress(100, 'Contato salvo na planilha! ✓');
-      showToast('Contato exportado com sucesso!', 'success');
+      if (exportResult.exported === 0 && exportResult.message) {
+        updateProgress(100, exportResult.message);
+        showToast(exportResult.message, 'info');
+      } else {
+        updateProgress(100, 'Contato salvo na planilha! ✓');
+        showToast('Contato exportado com sucesso!', 'success');
+      }
 
       // Reset after a moment
       setTimeout(() => {

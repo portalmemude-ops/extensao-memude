@@ -3,6 +3,7 @@
   "name": "MeMude - WhatsApp to Sheets",
   "version": "1.0.0",
   "description": "Extraia contatos do WhatsApp Web e exporte automaticamente para Google Sheets",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAs0ECnhP6Td7uBiWUMz9VrsC3WM4TpaLO9iZQZnoGMIlOxlhe4VS80padebKvRtrK4XqbArAFRwwPOo4L/j9E6uF1IZDJI8znJaIg1OPTl5bKTUs0tciwBgdfsH2z3StymSI82dd74esA4SRx96DUvxIdXTuY8Gso6vWyT5ubd0/isCUcKLE46AGys6RszwRzehNmF5f+zcZOCFdf4eP3g5zSMmvI6kaMQZaRAFA31VU/MGyQnbi7YySxWPBmp0+2unEQKuv+sdmFvM55jEaBJ2G7UEMSCFubm4Aw6MCLlzRlR4z7Zg7mgUKOiVLNRNnbnKxouSCzqNKLS/aXDzEcxQIDAQAB",
   "permissions": [
     "storage",
     "identity",
@@ -15,12 +16,6 @@
     "https://sheets.googleapis.com/*",
     "https://www.googleapis.com/*"
   ],
-  "oauth2": {
-    "client_id": "259488195972-va641pjevihvcm13kmnve5lr43jrgoeb.apps.googleusercontent.com",
-    "scopes": [
-      "https://www.googleapis.com/auth/spreadsheets"
-    ]
-  },
   "background": {
     "service_worker": "background/service-worker.js"
   },
@@ -37,17 +32,6 @@
         "content/overlay.css"
       ],
       "run_at": "document_idle"
-    }
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": [
-        "utils/*",
-        "content/*"
-      ],
-      "matches": [
-        "https://web.whatsapp.com/*"
-      ]
     }
   ],
   "action": {
