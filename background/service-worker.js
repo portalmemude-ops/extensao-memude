@@ -161,8 +161,7 @@ async function writeContacts(contacts, settings, token) {
   const duplicated = enriched.length - newContacts.length;
 
   if (newContacts.length === 0) {
-    // Mesmo assim registra a tentativa no histórico
-    await History.addBulk(enriched.map(c => ({ ...c, exported: false, duplicate: true })));
+    // Não polui o histórico com entradas duplicadas — só retorna o sumário.
     return {
       success: true,
       exported: 0,
@@ -215,16 +214,36 @@ async function handleTestConnection(data) {
 }
 
 // ============================================================
+// Helpers
+// ============================================================
+
+/**
+ * Encontra a melhor aba do WhatsApp Web entre todas as janelas.
+ * Prefere a aba ativa da janela focada → qualquer ativa → qualquer.
+ */
+async function findWhatsAppTab() {
+  const all = await chrome.tabs.query({ url: 'https://web.whatsapp.com/*' });
+  if (!all.length) return null;
+  // Prefere uma aba ativa (qualquer janela), senão pega a primeira.
+  return all.find(t => t.active) || all[0];
+}
+
+// ============================================================
 // Atalhos de teclado (chrome.commands)
 // ============================================================
 chrome.commands.onCommand.addListener(async (command) => {
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab || !tab.url || !tab.url.includes('web.whatsapp.com')) {
-      // Sem WhatsApp aberto — abre uma aba
+    const tab = await findWhatsAppTab();
+    if (!tab) {
+      // Sem WhatsApp aberto em lugar nenhum — abre uma aba
       chrome.tabs.create({ url: 'https://web.whatsapp.com/' });
       return;
     }
+    // Garante que a aba está focada para os atalhos funcionarem
+    try {
+      await chrome.tabs.update(tab.id, { active: true });
+      if (tab.windowId != null) await chrome.windows.update(tab.windowId, { focused: true });
+    } catch (e) { /* ignore */ }
     const action = command === 'open-overlay' ? 'OVERLAY_OPEN' : 'RUN_QUICK_CAPTURE';
     try {
       await chrome.tabs.sendMessage(tab.id, { action });

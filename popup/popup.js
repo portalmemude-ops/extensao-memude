@@ -259,10 +259,11 @@ async function handleExtract() {
   hideResult();
 
   try {
-    // Get active tab
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    // Procura qualquer aba do WhatsApp Web (em qualquer janela)
+    const waTabs = await chrome.tabs.query({ url: 'https://web.whatsapp.com/*' });
+    const tab = waTabs.find(t => t.active) || waTabs[0];
 
-    if (!tab || !tab.url || !tab.url.includes('web.whatsapp.com')) {
+    if (!tab) {
       showToast('Abra o WhatsApp Web primeiro!', 'error');
       return;
     }

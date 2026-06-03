@@ -10,13 +10,24 @@
   'use strict';
 
   const PREFIX = '[MeMude]';
+  const STORAGE_KEY = 'memude_debug';
   let debugFlag = null; // lazy
 
   function isDebug() {
     if (debugFlag !== null) return debugFlag;
+    // 1) localStorage (popup/content scripts)
     try {
-      if (typeof localStorage !== 'undefined' && localStorage.getItem('memude_debug') === '1') {
+      if (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY) === '1') {
         return (debugFlag = true);
+      }
+    } catch (e) {}
+    // 2) chrome.storage.local — async, mas dispara a leitura para
+    //    próximas chamadas (funciona no service worker)
+    try {
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.get(STORAGE_KEY, (data) => {
+          debugFlag = data && data[STORAGE_KEY] === true;
+        });
       }
     } catch (e) {}
     return (debugFlag = false);
@@ -27,11 +38,29 @@
     debugFlag = !!flag;
     try {
       if (typeof localStorage !== 'undefined') {
-        if (flag) localStorage.setItem('memude_debug', '1');
-        else localStorage.removeItem('memude_debug');
+        if (flag) localStorage.setItem(STORAGE_KEY, '1');
+        else localStorage.removeItem(STORAGE_KEY);
+      }
+    } catch (e) {}
+    // Espalha para o service worker via storage.local
+    try {
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        if (flag) chrome.storage.local.set({ [STORAGE_KEY]: true });
+        else chrome.storage.local.remove(STORAGE_KEY);
       }
     } catch (e) {}
   }
+
+  // Service worker: escuta mudanças no flag para sincronizar imediatamente
+  try {
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === 'local' && changes[STORAGE_KEY]) {
+          debugFlag = changes[STORAGE_KEY].newValue === true;
+        }
+      });
+    }
+  } catch (e) {}
 
   const Logger = {
     debug(...args) { if (isDebug()) console.log(PREFIX, ...args); },

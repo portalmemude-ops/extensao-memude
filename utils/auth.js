@@ -83,7 +83,9 @@ const AUTH = {
       '&response_type=token' +
       '&redirect_uri=' + encodeURIComponent(redirectUri) +
       '&scope=' + encodeURIComponent(this.SCOPES.join(' ')) +
-      '&prompt=' + encodeURIComponent('select_account consent');
+      // select_account: o usuário escolhe a conta a cada login (mas
+      // o consentimento já dado é lembrado — sem fricção repetida).
+      '&prompt=' + encodeURIComponent('select_account');
 
     const redirectResponse = await new Promise((resolve, reject) => {
       chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, (resp) => {

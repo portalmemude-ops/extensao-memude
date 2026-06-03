@@ -667,8 +667,15 @@
     const main = document.querySelector('#main');
     if (!main) return '';
 
-    // Get the entire HTML of #main and regex for JIDs
+    // Get the entire HTML of #main and regex for JIDs.
+    // Guard de tamanho: chats gigantescos podem chegar a vários MB
+    // de innerHTML. Pulamos esse fallback nesse caso (estratégias
+    // anteriores cobrem o caso comum).
     const mainHtml = main.innerHTML || '';
+    if (mainHtml.length > 500_000) {
+      log.debug('Full DOM scan skipped (innerHTML > 500KB)');
+      return '';
+    }
     JID_REGEX.lastIndex = 0;
     
     const jidCount = new Map();
