@@ -26,6 +26,13 @@ function bindEvents() {
   document.getElementById('btn-send-to-sheet').addEventListener('click', handleSendToSheet);
   document.getElementById('sheet-url').addEventListener('input', debounce(validateSheetUrl, 500));
 
+  // Auto-save dos toggles principais (sem precisar clicar em Salvar)
+  document.getElementById('add-9th-digit').addEventListener('change', autoSaveToggle);
+  document.getElementById('auto-send').addEventListener('change', () => {
+    autoSaveToggle();
+    updateCaptureButtonLabel();
+  });
+
   // Secondary actions
   const btnTest = document.getElementById('btn-test-sheet');
   if (btnTest) btnTest.addEventListener('click', handleTestSheet);
@@ -186,6 +193,30 @@ async function loadSettings() {
   document.getElementById('field-status').placeholder = s.defaultStatus || 'Novo';
   document.getElementById('field-source').placeholder = s.defaultSource || 'WhatsApp';
   if (s.sheetUrl) validateSheetUrl();
+  updateCaptureButtonLabel();
+}
+
+/**
+ * Salva imediatamente as toggles principais (add-9th-digit, auto-send)
+ * sem precisar do botão Salvar. Mostra um feedback discreto.
+ */
+async function autoSaveToggle() {
+  const partial = {
+    add9thDigit: document.getElementById('add-9th-digit').checked,
+    autoSendOnCapture: document.getElementById('auto-send').checked
+  };
+  await Settings.saveSettings(partial);
+  showToast('Salvo', 'success');
+}
+
+/**
+ * Atualiza o label do botão de capturar conforme o modo de envio
+ * automático: "Capturar e Enviar" (1 clique) vs "Capturar do Chat Aberto".
+ */
+function updateCaptureButtonLabel() {
+  const auto = document.getElementById('auto-send').checked;
+  const span = document.querySelector('#btn-extract span');
+  if (span) span.textContent = auto ? 'Capturar e Enviar' : 'Capturar do Chat Aberto';
 }
 
 async function handleResetSettings() {
@@ -333,16 +364,20 @@ async function handleExtract() {
     }
 
     const settings = await Settings.getSettings();
+    const phoneBefore9 = currentContact.phone;
     if (settings && settings.add9thDigit && currentContact.phone) {
       currentContact.phone = apply9thDigit(currentContact.phone);
     }
+    const ninthApplied = phoneBefore9 !== currentContact.phone;
 
-    showResult(currentContact);
-    showToast('Contato capturado!', 'success');
-
-    // F2: envio automático se a setting estiver ligada
+    // F2: envio automático = pula UI de preview/confirmação
     if (settings.autoSendOnCapture && currentContact.phone) {
-      await handleSendToSheet();
+      // Aplica defaults se não houver edição manual no popup (em auto-send
+      // não há edição inline — usa defaultStatus/defaultSource direto)
+      await handleSendToSheet({ skipResultUI: true });
+    } else {
+      showResult(currentContact, { ninthApplied });
+      showToast('Contato capturado!', 'success');
     }
 
   } catch (err) {
@@ -357,7 +392,7 @@ async function handleExtract() {
 // ============================================================
 // SEND TO SHEET — Export the extracted contact
 // ============================================================
-async function handleSendToSheet() {
+async function handleSendToSheet(opts = {}) {
   if (!currentContact) {
     showToast('Capture um contato primeiro', 'error');
     return;
@@ -369,12 +404,15 @@ async function handleSendToSheet() {
   }
 
   // Mescla campos editados no popup ao contato corrente
-  const editStatus = document.getElementById('field-status').value.trim();
-  const editSource = document.getElementById('field-source').value.trim();
-  const editNotes = document.getElementById('field-notes').value.trim();
-  if (editStatus) currentContact.status = editStatus;
-  if (editSource) currentContact.source = editSource;
-  if (editNotes) currentContact.notes = editNotes;
+  // (skipResultUI = auto-send: não há edição manual)
+  if (!opts.skipResultUI) {
+    const editStatus = document.getElementById('field-status').value.trim();
+    const editSource = document.getElementById('field-source').value.trim();
+    const editNotes = document.getElementById('field-notes').value.trim();
+    if (editStatus) currentContact.status = editStatus;
+    if (editSource) currentContact.source = editSource;
+    if (editNotes) currentContact.notes = editNotes;
+  }
 
   const settings = await Settings.getSettings();
   if (!settings || !settings.spreadsheetId) {
@@ -452,9 +490,20 @@ async function handleSendToSheet() {
 // ============================================================
 // UI Helpers
 // ============================================================
-function showResult(contact) {
+function showResult(contact, opts = {}) {
   document.getElementById('result-name').textContent = contact.name || '(Sem nome salvo)';
-  document.getElementById('result-phone').textContent = contact.phone || '(Sem telefone)';
+  const phoneEl = document.getElementById('result-phone');
+  phoneEl.textContent = contact.phone || '(Sem telefone)';
+  // Badge "9 aplicado" quando a função add9thDigit transformou o número
+  const badge = document.getElementById('result-phone-badge');
+  if (badge) {
+    if (opts.ninthApplied) {
+      badge.textContent = '9 aplicado';
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+  }
   document.getElementById('extract-result').classList.remove('hidden');
 }
 

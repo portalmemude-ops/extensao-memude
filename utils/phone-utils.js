@@ -41,23 +41,50 @@
 
   /**
    * Adiciona o 9º dígito em celulares brasileiros que estão sem ele.
-   * +55XX8XXXXXXX → +55XX98XXXXXXX
+   * Casos:
+   *   - +55XX 8XXXXXXX (12 dígitos com +) → +55XX 9 8XXXXXXX (13 dígitos)
+   *   - Idem sem +
+   *   - Já tem 9 (13 dígitos) → não modifica
+   *   - Local 8-dig começa em 9 → mantém conservador (não dobra o 9)
    * @param {string} phone
-   * @returns {string}
+   * @returns {string} phone com 9 (ou inalterado)
    */
   function add9thDigit(phone) {
     if (!phone) return phone;
+    const orig = phone;
+    let result = phone;
+    let reason = 'no-match';
+
     // Com +
     let m = phone.match(/^\+55(\d{2})(\d{8})$/);
     if (m) {
       const local = m[2];
-      if (!local.startsWith('9')) return `+55${m[1]}9${local}`;
-      return phone;
+      if (!local.startsWith('9')) {
+        result = `+55${m[1]}9${local}`;
+        reason = 'added-with-plus';
+      } else {
+        reason = 'local-already-starts-with-9';
+      }
+    } else {
+      // Sem +
+      m = phone.match(/^55(\d{2})(\d{8})$/);
+      if (m) {
+        if (!m[2].startsWith('9')) {
+          result = `55${m[1]}9${m[2]}`;
+          reason = 'added-no-plus';
+        } else {
+          reason = 'local-already-starts-with-9';
+        }
+      } else if (/^\+?55\d{11}$/.test(phone)) {
+        reason = 'already-13-digits';
+      }
     }
-    // Sem +
-    m = phone.match(/^55(\d{2})(\d{8})$/);
-    if (m && !m[2].startsWith('9')) return `55${m[1]}9${m[2]}`;
-    return phone;
+
+    // Log opcional para diagnóstico
+    if (typeof Logger !== 'undefined' && Logger.isDebug && Logger.isDebug()) {
+      Logger.debug(`add9thDigit: "${orig}" → "${result}" [${reason}]`);
+    }
+    return result;
   }
 
   /**

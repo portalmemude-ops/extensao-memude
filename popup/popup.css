@@ -533,6 +533,25 @@ body {
   letter-spacing: 0.3px;
 }
 
+.result-phone-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.result-phone-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: rgba(37, 211, 102, 0.18);
+  color: var(--accent-green);
+  border: 1px solid rgba(37, 211, 102, 0.3);
+}
+
 /* ============================================================
    Progress
    ============================================================ */

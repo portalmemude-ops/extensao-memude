@@ -25,7 +25,7 @@
     add9thDigit: false,
     defaultStatus: 'Novo',
     defaultSource: 'WhatsApp',
-    autoSendOnCapture: false,   // F2: captura → envia direto sem confirmar
+    autoSendOnCapture: true,    // F2: captura → envia direto sem confirmar (default ON)
     keepHistory: true,
     historyLimit: 500
   };
