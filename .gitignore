@@ -1,0 +1,17 @@
+# Dependências
+node_modules/
+
+# Chaves e segredos — NUNCA versionar
+*.pem
+key.pem
+*.key
+
+# Sistema operacional
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Build / empacotamento
+*.zip
+*.crx
+dist/
