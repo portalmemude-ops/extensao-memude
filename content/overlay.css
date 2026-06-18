@@ -61,6 +61,7 @@
   to { transform: scale(1) rotate(0deg); opacity: 1; }
 }
 
+.memude-fab-logo { width: 34px; height: 34px; display: block; pointer-events: none; }
 .memude-fab:hover { transform: scale(1.08); box-shadow: 0 8px 28px rgba(65, 47, 145, 0.5); }
 .memude-fab:active { transform: scale(0.95); }
 .memude-fab.active { transform: rotate(45deg); border-color: var(--me-purple); }

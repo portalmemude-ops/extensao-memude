@@ -47,12 +47,7 @@
   function template() {
     return `
       <button class="memude-fab" id="memude-fab" title="MeMude">
-        <svg width="34" height="34" viewBox="0 0 32 32" aria-hidden="true">
-          <rect x="3" y="3" width="26" height="26" rx="8" fill="#412F91"/>
-          <path d="M9 22 L9 12.5 Q9 10.4 11 11.3 L16 16.5 L21 11.3 Q23 10.4 23 12.5 L23 22"
-                fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
-          <circle cx="16" cy="21" r="1.7" fill="#fff"/>
-        </svg>
+        <img class="memude-fab-logo" src="${chrome.runtime.getURL('icons/icon128.png')}" alt="MeMude" draggable="false">
         <span class="memude-fab-badge hidden" id="memude-badge">0</span>
       </button>
       <div class="memude-panel hidden" id="memude-panel">

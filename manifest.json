@@ -54,6 +54,12 @@
       "description": "Abrir o painel MeMude no WhatsApp"
     }
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/*.png"],
+      "matches": ["https://web.whatsapp.com/*"]
+    }
+  ],
   "action": {
     "default_popup": "popup/popup.html",
     "default_icon": {
