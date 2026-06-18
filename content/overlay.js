@@ -47,8 +47,10 @@
   function template() {
     return `
       <button class="memude-fab" id="memude-fab" title="MeMude">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-          <path d="M17.6 6.32A7.85 7.85 0 0 0 12.05 4a7.94 7.94 0 0 0-6.88 11.89L4 20l4.2-1.1a7.93 7.93 0 0 0 3.79 1 8 8 0 0 0 5.61-13.58z" fill="white"/>
+        <svg width="30" height="30" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <path d="M8 23 L8 13 Q8 10.6 10 11.4 L16 17 L22 11.4 Q24 10.6 24 13 L24 23"
+                fill="none" stroke="#fff" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="16" cy="22" r="2" fill="#fff"/>
         </svg>
         <span class="memude-fab-badge hidden" id="memude-badge">0</span>
       </button>

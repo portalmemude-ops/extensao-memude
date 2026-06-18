@@ -8,16 +8,18 @@
    ============================================================ */
 
 :root {
-  /* ---- Marca ---- */
-  --me-primary: 152 68% 47%;        /* MeMude Emerald */
-  --me-primary-dark: 152 68% 38%;
-  --me-secondary: 190 90% 40%;      /* MeMude Cyan */
-  --me-secondary-dark: 190 90% 32%;
-  --me-accent: 262 83% 65%;         /* Roxo (focus/ring) */
+  /* ---- Marca (oficial MeMude) ----
+     Rosa #EA2261 = hsl(341 83% 53%) · Roxo #412F91 = hsl(251 51% 38%) */
+  --me-primary: 341 83% 53%;        /* Rosa MeMude — ação primária */
+  --me-primary-dark: 341 75% 44%;
+  --me-secondary: 251 51% 38%;      /* Roxo MeMude */
+  --me-secondary-dark: 251 55% 30%;
+  --me-accent: 251 60% 60%;         /* Roxo (focus/ring) */
 
-  --gradient: linear-gradient(135deg, hsl(var(--me-primary)), hsl(var(--me-secondary)));
-  --gradient-hover: linear-gradient(135deg, hsl(var(--me-primary-dark)), hsl(var(--me-secondary-dark)));
-  --gradient-soft: linear-gradient(135deg, hsl(152 68% 96%), hsl(190 90% 96%));
+  /* Gradiente da marca: roxo → rosa */
+  --gradient: linear-gradient(135deg, hsl(var(--me-secondary)), hsl(var(--me-primary)));
+  --gradient-hover: linear-gradient(135deg, hsl(var(--me-secondary-dark)), hsl(var(--me-primary-dark)));
+  --gradient-soft: linear-gradient(135deg, hsl(251 60% 96%), hsl(341 83% 96%));
 
   /* ---- Superfícies / neutros ---- */
   --bg: 240 30% 99%;
@@ -254,7 +256,7 @@ body {
   background: var(--gradient);
   color: #fff;
   box-shadow: var(--shadow-sm);
-  text-shadow: 0 1px 1px hsl(190 90% 22% / 0.45); /* nitidez do texto sobre o gradiente */
+  text-shadow: 0 1px 1px hsl(251 60% 22% / 0.5); /* nitidez do texto sobre o gradiente */
 }
 .btn-extract:hover:not(:disabled),
 .btn-save:hover:not(:disabled) {
