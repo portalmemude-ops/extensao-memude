@@ -35,10 +35,10 @@
 /* ---- Floating Action Button ---- */
 .memude-fab {
   position: fixed;
-  bottom: 24px;
-  right: 24px;
-  width: 56px;
-  height: 56px;
+  bottom: 96px;          /* acima da barra de digitar do WhatsApp */
+  right: 22px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
   background: var(--me-grad);
   border: none;
@@ -85,10 +85,10 @@
 /* ---- Panel ---- */
 .memude-panel {
   position: fixed;
-  bottom: 92px;
-  right: 24px;
-  width: 384px;
-  max-height: 540px;
+  bottom: 160px;         /* abre acima do botão flutuante reposicionado */
+  right: 22px;
+  width: 372px;
+  max-height: 520px;
   background: hsl(var(--me-surface));
   border: 1px solid hsl(var(--me-border));
   border-radius: 18px;
