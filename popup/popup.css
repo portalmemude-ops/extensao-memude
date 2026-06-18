@@ -16,10 +16,11 @@
   --me-secondary-dark: 251 55% 30%;
   --me-accent: 251 60% 60%;         /* Roxo (focus/ring) */
 
-  /* Gradiente da marca: roxo → rosa */
-  --gradient: linear-gradient(135deg, hsl(var(--me-secondary)), hsl(var(--me-primary)));
-  --gradient-hover: linear-gradient(135deg, hsl(var(--me-secondary-dark)), hsl(var(--me-primary-dark)));
-  --gradient-soft: linear-gradient(135deg, hsl(251 60% 96%), hsl(341 83% 96%));
+  /* Cores chapadas da marca (sem gradiente, igual ao site) */
+  --fill-pink: hsl(var(--me-primary));        /* ação primária */
+  --fill-pink-dark: hsl(var(--me-primary-dark));
+  --fill-purple: hsl(var(--me-secondary));    /* header / destaque */
+  --tint-pink: hsl(var(--me-primary) / 0.06); /* leve fundo rosado */
 
   /* ---- Superfícies / neutros ---- */
   --bg: 240 30% 99%;
@@ -88,7 +89,7 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 16px 18px;
-  background: var(--gradient);
+  background: var(--fill-purple);
   color: #fff;
   position: sticky;
   top: 0;
@@ -101,14 +102,12 @@ body {
 .logo-icon {
   width: 42px;
   height: 42px;
-  background: hsl(0 0% 100% / 0.18);
-  border: 1px solid hsl(0 0% 100% / 0.30);
+  background: #fff;
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
-  backdrop-filter: blur(6px);
+  box-shadow: 0 2px 6px hsl(251 55% 20% / 0.25);
 }
 
 .header-text h1 {
@@ -189,20 +188,16 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
-/* Card de captura: destaque com leve gradiente da marca */
+/* Card de captura: destaque com borda rosa chapada */
 .extract-card {
-  background:
-    linear-gradient(hsl(var(--surface)), hsl(var(--surface))) padding-box,
-    var(--gradient) border-box;
-  border: 1.5px solid transparent;
+  border: 1.5px solid hsl(var(--me-primary) / 0.45);
   position: relative;
   overflow: hidden;
 }
 .extract-card::before {
   content: '';
   position: absolute; inset: 0;
-  background: var(--gradient-soft);
-  opacity: 0.6;
+  background: var(--tint-pink);
   pointer-events: none;
 }
 .extract-card > * { position: relative; }
@@ -251,18 +246,17 @@ body {
 .btn:focus-visible { outline: 3px solid hsl(var(--me-accent) / 0.5); outline-offset: 2px; }
 .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
-/* Primário / gradiente da marca */
+/* Primário — rosa chapado (igual aos botões do site) */
 .btn-extract, .btn-save {
-  background: var(--gradient);
+  background: var(--fill-pink);
   color: #fff;
   box-shadow: var(--shadow-sm);
-  text-shadow: 0 1px 1px hsl(251 60% 22% / 0.5); /* nitidez do texto sobre o gradiente */
 }
 .btn-extract:hover:not(:disabled),
 .btn-save:hover:not(:disabled) {
   transform: translateY(-1px);
+  background: var(--fill-pink-dark);
   box-shadow: var(--shadow-glow);
-  filter: brightness(1.03);
 }
 .btn-extract:active:not(:disabled),
 .btn-save:active:not(:disabled) { transform: translateY(0) scale(0.99); }
@@ -435,7 +429,7 @@ input:focus {
   box-shadow: var(--shadow-sm);
   transition: transform var(--t-bounce);
 }
-.toggle-input:checked + .toggle-slider { background: var(--gradient); border-color: transparent; }
+.toggle-input:checked + .toggle-slider { background: var(--fill-pink); border-color: transparent; }
 .toggle-input:checked + .toggle-slider::before { transform: translateX(18px); }
 .toggle-input:focus-visible + .toggle-slider { box-shadow: 0 0 0 3px hsl(var(--me-accent) / 0.45); }
 
@@ -464,7 +458,7 @@ input:focus {
 .result-avatar {
   width: 42px; height: 42px;
   border-radius: 50%;
-  background: var(--gradient);
+  background: var(--fill-purple);
   color: #fff;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
@@ -488,7 +482,7 @@ input:focus {
    ============================================================ */
 .progress-container { margin-top: 12px; display: flex; flex-direction: column; gap: 7px; }
 .progress-bar { width: 100%; height: 6px; background: hsl(var(--surface-3)); border-radius: var(--radius-full); overflow: hidden; }
-.progress-fill { height: 100%; width: 0%; background: var(--gradient); border-radius: var(--radius-full); transition: width var(--t-smooth); }
+.progress-fill { height: 100%; width: 0%; background: var(--fill-pink); border-radius: var(--radius-full); transition: width var(--t-smooth); }
 .progress-text { font-size: 11.5px; color: hsl(var(--text-muted)); text-align: center; font-weight: 500; }
 
 /* ============================================================
