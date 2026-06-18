@@ -132,19 +132,25 @@ async function handleExport(data) {
  * Deduplica, grava na planilha e atualiza o histórico.
  */
 async function writeContacts(contacts, settings, token) {
+  const today = new Date().toLocaleDateString('pt-BR'); // dd/mm/aaaa
+
   // Aplica defaults da equipe nos campos opcionais
   const enriched = contacts.map(c => ({
+    date: c.date || today,
     name: c.name || '',
     phone: c.phone || '',
-    status: c.status || settings.defaultStatus || '',
+    // Status NÃO recebe default aqui: a coluna fica em branco por padrão
+    // (colStatus vazio). Só grava se o caller mandar algo explícito.
+    status: c.status || '',
     source: c.source || settings.defaultSource || '',
     notes: c.notes || '',
     timestamp: c.timestamp || new Date().toLocaleString('pt-BR')
   }));
 
-  // Aplica 9º dígito se a setting estiver ligada
-  if (settings.add9thDigit) {
-    for (const c of enriched) c.phone = PhoneUtils.add9thDigit(c.phone);
+  // Corrige o 9º dígito (omitido pelo WhatsApp no JID) e formata p/ a planilha.
+  for (const c of enriched) {
+    if (settings.add9thDigit) c.phone = PhoneUtils.add9thDigit(c.phone);
+    if (settings.formatPhone) c.phone = PhoneUtils.formatPhoneBR(c.phone);
   }
 
   // Carrega chaves já existentes na planilha + no histórico local
@@ -172,6 +178,7 @@ async function writeContacts(contacts, settings, token) {
   }
 
   const cols = {
+    date: settings.colDate,
     name: settings.colName,
     phone: settings.colPhone,
     status: settings.colStatus,

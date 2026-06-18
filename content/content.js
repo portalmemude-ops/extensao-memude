@@ -41,13 +41,17 @@
         return true;
       }
 
-      // extractActiveContact is now async (uses drawer opening)
-      extractor.extractActiveContact()
-        .then(result => sendResponse(result))
-        .catch(err => {
-          if (typeof Logger !== 'undefined') Logger.error('Extraction error:', err); else console.error('[MeMude] Extraction error:', err);
-          sendResponse({ error: err.message, contact: null });
-        });
+      // Lê as fontes conhecidas das settings para detectar a etiqueta.
+      chrome.storage.sync.get('memude_settings', (data) => {
+        const knownSources = (data.memude_settings && data.memude_settings.knownSources) || undefined;
+        // extractActiveContact is now async (uses drawer opening)
+        extractor.extractActiveContact({ knownSources })
+          .then(result => sendResponse(result))
+          .catch(err => {
+            if (typeof Logger !== 'undefined') Logger.error('Extraction error:', err); else console.error('[MeMude] Extraction error:', err);
+            sendResponse({ error: err.message, contact: null });
+          });
+      });
       return true; // Keep channel open for async response
     }
 

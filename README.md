@@ -36,6 +36,30 @@ instalação já venha com a planilha, colunas e defaults da sua equipe.
 Cada SDR pode personalizar pelo popup; o botão *"Restaurar padrão da equipe"*
 volta tudo ao default.
 
+### Mapa de colunas (layout LEADS)
+
+| Coluna | Campo | Origem |
+| ------ | ----- | ------ |
+| A | Data | data da captura (dd/mm/aaaa) |
+| B | Nome | header da conversa |
+| C | Whatsapp | telefone, com 9º dígito corrigido e formatado `+55 (85) 9XXXX-XXXX` |
+| F | Fonte | **etiqueta** da conversa (Google, Facebook, …) |
+| G | Status | **não é preenchido** pela extensão |
+
+- **9º dígito**: o WhatsApp omite o 9 no JID de números antigos; a extensão
+  recoloca automaticamente (só em celular, nunca em fixo).
+- **Fonte por etiqueta**: configure a lista em `knownSources` (TEAM_DEFAULTS).
+  A extensão procura esses nomes na conversa aberta e grava o primeiro que casar.
+
+Ao atualizar o mapa, suba `DEFAULTS_VERSION` para que instalações já existentes
+recebam o novo mapa automaticamente — preservando URL da planilha e login.
+
+## Testes
+
+```
+npm test     # node tests/run-tests.js — phone, migração, planilha, etiqueta
+```
+
 ## Estrutura
 
 ```

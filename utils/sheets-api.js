@@ -118,7 +118,7 @@ const SheetsAPI = {
       // Mapa de campo -> índice da coluna (somente colunas configuradas)
       const fieldIdx = {};
       let maxIdx = -1;
-      for (const field of ['name', 'phone', 'status', 'source', 'notes', 'timestamp']) {
+      for (const field of ['date', 'name', 'phone', 'status', 'source', 'notes', 'timestamp']) {
         const letter = (cols && cols[field]) ? String(cols[field]).trim() : '';
         if (letter) {
           const idx = this.colLetterToIndex(letter);

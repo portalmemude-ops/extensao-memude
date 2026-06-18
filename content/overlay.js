@@ -152,14 +152,15 @@
     busy = true;
 
     try {
-      const res = await extractor.extractActiveContact();
+      const settingsForExtract = await getSettings();
+      const res = await extractor.extractActiveContact({ knownSources: settingsForExtract.knownSources });
       if (res.error === 'NO_CHAT_OPEN') { toast('Abra uma conversa primeiro', 'info'); return { ok: false, error: res.error }; }
       if (res.error === 'GROUP_CHAT')   { toast('Chat de grupo — abra individual', 'info'); return { ok: false, error: res.error }; }
       if (res.error || !res.contact)    { toast('Não conseguiu extrair', 'error'); return { ok: false, error: res.error }; }
 
       const contact = res.contact;
       // Aplica 9º dígito se setting estiver ligada
-      const settings = await getSettings();
+      const settings = settingsForExtract;
       if (settings.add9thDigit && contact.phone && PU) {
         contact.phone = PU.add9thDigit(contact.phone);
       }
@@ -179,8 +180,8 @@
       staged.push({
         name: contact.name || '',
         phone: contact.phone,
-        status: settings.defaultStatus || '',
-        source: settings.defaultSource || '',
+        status: '', // Status não é preenchido pela extensão
+        source: contact.source || settings.defaultSource || '', // Fonte vinda da etiqueta
         notes: '',
         key,
         selected: true
@@ -226,7 +227,7 @@
             <span class="memude-contact-name">${escapeHtml(c.name || '(sem nome)')}</span>
             <span class="memude-contact-phone">${escapeHtml(c.phone)}</span>
           </div>
-          <span class="memude-contact-source">${escapeHtml(c.status || '')}</span>
+          <span class="memude-contact-source">${escapeHtml(c.source || '')}</span>
         </label>
       </div>
     `).join('');

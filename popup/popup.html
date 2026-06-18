@@ -165,13 +165,13 @@
           <div class="form-group">
             <label for="col-name">Coluna Nome</label>
             <div class="input-wrapper">
-              <input type="text" id="col-name" placeholder="A" maxlength="3" autocomplete="off">
+              <input type="text" id="col-name" placeholder="B" maxlength="3" autocomplete="off">
             </div>
           </div>
           <div class="form-group">
             <label for="col-phone">Coluna WhatsApp</label>
             <div class="input-wrapper">
-              <input type="text" id="col-phone" placeholder="B" maxlength="3" autocomplete="off">
+              <input type="text" id="col-phone" placeholder="C" maxlength="3" autocomplete="off">
             </div>
           </div>
         </div>
@@ -263,7 +263,7 @@
 
       <!-- History -->
       <section class="card config-card history-card">
-        <div class="card-header" style="cursor: pointer;" id="btn-toggle-history">
+        <div class="card-header card-header-toggle" id="btn-toggle-history">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
             <path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.94 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18z" fill="currentColor"/>
           </svg>
@@ -277,18 +277,18 @@
       </section>
 
       <!-- Diagnostics -->
-      <section class="card config-card" style="margin-top: 14px;">
-        <div class="card-header" style="cursor: pointer;" id="btn-toggle-diag">
+      <section class="card config-card">
+        <div class="card-header card-header-toggle" id="btn-toggle-diag">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" fill="currentColor"/>
           </svg>
           <h2>Diagnóstico e Erros</h2>
         </div>
-        <div id="diagnostic-panel" class="hidden" style="margin-top: 10px; font-size: 11px; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px;">
-          <div><strong>Extension ID:</strong> <span id="diag-ext-id"></span></div>
-          <div><strong>Último Erro:</strong> <span id="diag-last-error">Nenhum</span></div>
-          <div style="margin-top: 6px;">
-            <label style="display: inline-flex; gap: 6px; align-items: center; cursor: pointer;">
+        <div id="diagnostic-panel" class="diag-panel hidden">
+          <div class="diag-row"><strong>Extension ID:</strong> <span id="diag-ext-id"></span></div>
+          <div class="diag-row"><strong>Último Erro:</strong> <span id="diag-last-error">Nenhum</span></div>
+          <div class="diag-row">
+            <label class="diag-check">
               <input type="checkbox" id="diag-debug-toggle"> Logs detalhados no Console (F12)
             </label>
           </div>

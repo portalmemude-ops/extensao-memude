@@ -129,8 +129,8 @@ function updateAuthUI(connected) {
 async function handleSave() {
   const url = document.getElementById('sheet-url').value.trim();
   const sheetName = document.getElementById('sheet-name').value.trim();
-  const colName = document.getElementById('col-name').value.trim().toUpperCase() || 'A';
-  const colPhone = document.getElementById('col-phone').value.trim().toUpperCase() || 'B';
+  const colName = document.getElementById('col-name').value.trim().toUpperCase() || 'B';
+  const colPhone = document.getElementById('col-phone').value.trim().toUpperCase() || 'C';
 
   const spreadsheetId = extractSpreadsheetId(url);
   if (url && !spreadsheetId) {
@@ -179,8 +179,8 @@ async function loadSettings() {
   const s = await Settings.getSettings();
   document.getElementById('sheet-url').value = s.sheetUrl || '';
   document.getElementById('sheet-name').value = s.sheetName || '';
-  document.getElementById('col-name').value = s.colName || 'A';
-  document.getElementById('col-phone').value = s.colPhone || 'B';
+  document.getElementById('col-name').value = s.colName || 'B';
+  document.getElementById('col-phone').value = s.colPhone || 'C';
   document.getElementById('col-status').value = s.colStatus || '';
   document.getElementById('col-source').value = s.colSource || '';
   document.getElementById('col-notes').value = s.colNotes || '';
@@ -504,6 +504,9 @@ function showResult(contact, opts = {}) {
       badge.classList.add('hidden');
     }
   }
+  // Pré-preenche a Fonte com a etiqueta detectada na conversa (editável)
+  const sourceField = document.getElementById('field-source');
+  if (sourceField && contact.source) sourceField.value = contact.source;
   document.getElementById('extract-result').classList.remove('hidden');
 }
 

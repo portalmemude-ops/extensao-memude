@@ -55,25 +55,34 @@
     let result = phone;
     let reason = 'no-match';
 
+    // Só adiciona o 9 em CELULAR. Local de 8 dígitos começando em 6/7/8 é
+    // celular antigo (sem 9); começando em 2/3/4/5 é telefone fixo — não mexe.
+    const isMobileLocal = (local) => /^[6-8]/.test(local);
+
     // Com +
     let m = phone.match(/^\+55(\d{2})(\d{8})$/);
     if (m) {
       const local = m[2];
-      if (!local.startsWith('9')) {
+      if (local.startsWith('9')) {
+        reason = 'local-already-starts-with-9';
+      } else if (isMobileLocal(local)) {
         result = `+55${m[1]}9${local}`;
         reason = 'added-with-plus';
       } else {
-        reason = 'local-already-starts-with-9';
+        reason = 'landline-skip';
       }
     } else {
       // Sem +
       m = phone.match(/^55(\d{2})(\d{8})$/);
       if (m) {
-        if (!m[2].startsWith('9')) {
-          result = `55${m[1]}9${m[2]}`;
+        const local = m[2];
+        if (local.startsWith('9')) {
+          reason = 'local-already-starts-with-9';
+        } else if (isMobileLocal(local)) {
+          result = `55${m[1]}9${local}`;
           reason = 'added-no-plus';
         } else {
-          reason = 'local-already-starts-with-9';
+          reason = 'landline-skip';
         }
       } else if (/^\+?55\d{11}$/.test(phone)) {
         reason = 'already-13-digits';
@@ -85,6 +94,35 @@
       Logger.debug(`add9thDigit: "${orig}" → "${result}" [${reason}]`);
     }
     return result;
+  }
+
+  /**
+   * Formata um telefone BR no padrão da planilha: "+55 (85) 9XXXX-XXXX"
+   * (celular) ou "+55 (85) XXXX-XXXX" (fixo). Números fora do padrão BR
+   * (outros países / incompletos) são devolvidos como vieram.
+   * @param {string} raw
+   * @returns {string}
+   */
+  function formatPhoneBR(raw) {
+    if (!raw) return raw;
+    const hasPlus = String(raw).trim().startsWith('+');
+    const d = String(raw).replace(/\D/g, '');
+
+    const fmt = (local) => local.length === 11           // DDD + 9 + 8 (celular)
+      ? `+55 (${local.slice(0, 2)}) ${local.slice(2, 7)}-${local.slice(7)}`
+      : `+55 (${local.slice(0, 2)}) ${local.slice(2, 6)}-${local.slice(6)}`; // DDD + 8 (fixo)
+
+    // Com código do país 55: formata o que sobra (10 ou 11 dígitos)
+    if (d.startsWith('55')) {
+      const rest = d.slice(2);
+      if (rest.length === 10 || rest.length === 11) return fmt(rest);
+      return raw;
+    }
+    // Sem código de país e sem "+": só assume BR para 10/11 dígitos crus.
+    // (Um "+1..." internacional cai fora daqui e é mantido como veio.)
+    if (!hasPlus && (d.length === 10 || d.length === 11)) return fmt(d);
+
+    return raw; // não é BR padrão — mantém o que chegou
   }
 
   /**
@@ -113,6 +151,7 @@
     looksLikePhone,
     normalizePhone,
     add9thDigit,
+    formatPhoneBR,
     phoneKey
   };
 
