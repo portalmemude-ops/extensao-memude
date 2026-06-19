@@ -132,11 +132,17 @@ const SheetsAPI = {
         return { success: false, error: 'Configure ao menos a coluna do Nome ou do Telefone' };
       }
 
+      // Evita que o Sheets interprete o valor como fórmula. No modo
+      // USER_ENTERED, células iniciadas por = + - @ viram fórmula (ex.:
+      // "+55 (85) 9..." dava #ERROR!). Um apóstrofo inicial força texto
+      // e não é exibido/armazenado.
+      const textSafe = (v) => (typeof v === 'string' && /^[=+\-@]/.test(v)) ? "'" + v : v;
+
       // Constrói as linhas
       const rows = contacts.map(contact => {
         const row = new Array(maxIdx + 1).fill('');
         for (const [field, idx] of Object.entries(fieldIdx)) {
-          row[idx] = contact[field] != null ? contact[field] : '';
+          row[idx] = textSafe(contact[field] != null ? contact[field] : '');
         }
         return row;
       });

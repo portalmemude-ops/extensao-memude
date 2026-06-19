@@ -102,19 +102,20 @@ function testSettingsMigration() {
     eq(s.colDate, 'A', 'migração: colDate = A');
     eq(s.colName, 'B', 'migração: colName = B');
     eq(s.colPhone, 'C', 'migração: colPhone = C');
-    eq(s.colStatus, '', 'migração: colStatus zerado (Status não é preenchido)');
+    eq(s.colStatus, 'G', 'migração: colStatus = G (Status preenchido)');
     eq(s.colSource, 'F', 'migração: colSource = F');
     eq(s.add9thDigit, true, 'migração: 9º dígito ligado');
     eq(s.formatPhone, true, 'migração: formatação ligada');
+    eq(s.defaultStatus, 'NOVO', 'migração: status padrão NOVO');
     ok(Array.isArray(s.knownSources) && s.knownSources.includes('Facebook'), 'migração: knownSources presente');
-    eq(s.defaultsVersion, 2, 'migração: versão atualizada');
+    eq(s.defaultsVersion, 3, 'migração: versão atualizada');
     // Preservados
     eq(s.sheetUrl, oldUser.sheetUrl, 'preserva sheetUrl');
     eq(s.spreadsheetId, 'ABC123', 'preserva spreadsheetId');
     eq(s.sheetName, 'LEADS', 'preserva sheetName');
     eq(s.autoSendOnCapture, false, 'preserva preferência do usuário (autoSend)');
     // Persistiu no storage?
-    eq(global.chrome._sync.memude_settings.defaultsVersion, 2, 'migração foi gravada no storage');
+    eq(global.chrome._sync.memude_settings.defaultsVersion, 3, 'migração foi gravada no storage');
 
     // Segunda chamada não deve re-migrar nem quebrar
     return S.getSettings().then((s2) => {
@@ -138,28 +139,28 @@ function testSheetsApi() {
   eq(API._indexToColLetter(5), 'F', '5 → F');
   eq(API.parseSpreadsheetUrl('https://docs.google.com/spreadsheets/d/XYZ/edit#gid=0'), 'XYZ', 'parse URL');
 
-  // appendContacts deve montar A..F com Data/Nome/Whatsapp/Fonte e
-  // NÃO tocar em Status (G).
+  // appendContacts deve montar A..G com Data/Nome/Whatsapp/Fonte/Status,
+  // forçando o telefone como texto (apóstrofo) p/ não virar fórmula.
   let captured = null;
   global.fetch = async (url, opts) => {
     captured = { url, body: JSON.parse(opts.body) };
     return { ok: true, json: async () => ({ updates: { updatedRows: 1 } }) };
   };
-  const cols = { date: 'A', name: 'B', phone: 'C', status: '', source: 'F', notes: '', timestamp: '' };
-  const contacts = [{ date: '18/06/2026', name: 'Maria', phone: '+55 (85) 98833-6228', source: 'Facebook', status: 'IGNORAR' }];
+  const cols = { date: 'A', name: 'B', phone: 'C', status: 'G', source: 'F', notes: '', timestamp: '' };
+  const contacts = [{ date: '18/06/2026', name: 'Maria', phone: '+55 (85) 98833-6228', source: 'Facebook', status: 'NOVO' }];
 
   return API.appendContacts('SID', 'LEADS', cols, contacts, 'tok').then((res) => {
     ok(res.success, 'append retornou sucesso');
     const row = captured.body.values[0];
-    eq(row.length, 6, 'linha cobre A..F (6 colunas)');
+    eq(row.length, 7, 'linha cobre A..G (7 colunas)');
     eq(row[0], '18/06/2026', 'A = Data');
     eq(row[1], 'Maria', 'B = Nome');
-    eq(row[2], '+55 (85) 98833-6228', 'C = Whatsapp formatado');
+    eq(row[2], "'+55 (85) 98833-6228", 'C = Whatsapp como texto (apóstrofo anti-fórmula)');
     eq(row[3], '', 'D = Email vazio');
     eq(row[4], '', 'E = Imóvel vazio');
     eq(row[5], 'Facebook', 'F = Fonte (etiqueta)');
-    ok(!captured.body.values[0].includes('IGNORAR'), 'Status nunca entra na linha (G intocada)');
-    ok(captured.url.includes('A%3AF') || decodeURIComponent(captured.url).includes('A:F'), 'range A:F');
+    eq(row[6], 'NOVO', 'G = Status NOVO');
+    ok(captured.url.includes('A%3AG') || decodeURIComponent(captured.url).includes('A:G'), 'range A:G');
 
     // getExistingPhones: dedup tolerante ao 9
     global.fetch = async () => ({ ok: true, json: async () => ({ values: [['+55 (85) 8833-6228']] }) });
@@ -223,7 +224,7 @@ function testExtractorLabel() {
 function testEnrichment() {
   globalThis.Logger = { isDebug: () => false, debug() {}, info() {}, warn() {}, error() {} };
   const P = loadGlobal('utils/phone-utils.js', 'PhoneUtils');
-  const settings = { add9thDigit: true, formatPhone: true, defaultSource: '' };
+  const settings = { add9thDigit: true, formatPhone: true, defaultSource: '', defaultStatus: 'NOVO' };
 
   const c = { name: 'Ana', phone: P.normalizePhone('8588336228'), source: 'Google' };
   let phone = c.phone;
@@ -232,9 +233,9 @@ function testEnrichment() {
 
   eq(phone, '+55 (85) 98833-6228', 'pipeline completo: 9 + formato');
   eq(c.source || settings.defaultSource || '', 'Google', 'fonte preservada da etiqueta');
-  // status sempre vazio (não recebe default)
-  const status = c.status || '';
-  eq(status, '', 'status vazio no enriquecimento');
+  // status recebe o default "NOVO"
+  const status = c.status || settings.defaultStatus || '';
+  eq(status, 'NOVO', 'status default NOVO no enriquecimento');
 }
 
 // ------------------------------------------------------------

@@ -14,7 +14,7 @@
   // Quando este número muda, os campos de mapeamento de coluna abaixo são
   // reaplicados automaticamente em instalações já existentes (sem perder a
   // URL da planilha nem o login). Veja getSettings().
-  const DEFAULTS_VERSION = 2;
+  const DEFAULTS_VERSION = 3;
 
   // ⚠️ EDITE AQUI para o padrão da SUA equipe.
   // Mapa de colunas segue o layout da planilha LEADS do MeMude:
@@ -26,7 +26,7 @@
     colDate: 'A',          // Data da captura (dd/mm/aaaa)
     colName: 'B',          // Nome
     colPhone: 'C',         // Whatsapp
-    colStatus: '',         // Status (G) — vazio de propósito: NÃO é preenchido pela extensão
+    colStatus: 'G',        // Status — preenchido com defaultStatus ("NOVO")
     colSource: 'F',        // Fonte (vem da etiqueta da conversa)
     colNotes: '',          // Observação — vazio = não grava
     colTimestamp: '',      // Timestamp completo — vazio = não grava
@@ -35,7 +35,7 @@
     // Etiquetas reconhecidas como Fonte. A extensão procura estes nomes na
     // conversa aberta; a primeira que casar vira a Fonte do lead.
     knownSources: ['Google', 'Facebook', 'Instagram', 'Indicação', 'Site', 'OLX', 'Tráfego', 'Orgânico'],
-    defaultStatus: 'Novo',
+    defaultStatus: 'NOVO',
     defaultSource: '',     // fallback quando nenhuma etiqueta é encontrada
     autoSendOnCapture: true,    // F2: captura → envia direto sem confirmar (default ON)
     keepHistory: true,
@@ -46,7 +46,7 @@
   // Campos reaplicados na migração de versão (preserva sheetUrl/login/etc.)
   const MIGRATED_FIELDS = [
     'colDate', 'colName', 'colPhone', 'colStatus', 'colSource',
-    'add9thDigit', 'formatPhone', 'knownSources', 'defaultsVersion'
+    'add9thDigit', 'formatPhone', 'knownSources', 'defaultStatus', 'defaultsVersion'
   ];
 
   const STORAGE_KEY = 'memude_settings';
