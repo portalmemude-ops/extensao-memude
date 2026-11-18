@@ -33,7 +33,8 @@
 
 /* ---------- Painel ---------- */
 #mmc-app .mmc-painel {
-  position: fixed; top: 72px; bottom: 160px; right: 22px; width: 380px; max-width: calc(100vw - 44px);
+  /* cresce com o conteúdo, a partir do botão; rola por dentro quando a lista é grande */
+  position: fixed; bottom: 160px; right: 22px; width: 380px; max-width: calc(100vw - 44px); max-height: calc(100vh - 232px);
   background: var(--mmc-fundo); border: 1px solid var(--mmc-borda); border-radius: 16px;
   display: flex; flex-direction: column; overflow: hidden; z-index: 999998;
   box-shadow: 0 20px 56px rgba(31, 27, 46, 0.28);
@@ -51,7 +52,7 @@
   color: #fff; font-size: 15px; cursor: pointer;
 }
 #mmc-app .mmc-icone:hover { background: rgba(255, 255, 255, 0.28); }
-#mmc-app .mmc-corpo { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+#mmc-app .mmc-corpo { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
 #mmc-app .mmc-rodape {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px;
   border-top: 1px solid var(--mmc-borda); background: var(--mmc-fundo-2); font-size: 12px; color: var(--mmc-suave);
@@ -61,7 +62,7 @@
 /* ---------- Textos ---------- */
 #mmc-app .mmc-titulo { margin: 0; font-size: 15px; font-weight: 700; color: var(--mmc-roxo-escuro); }
 #mmc-app .mmc-sub { margin: 0; font-size: 12.5px; color: var(--mmc-suave); line-height: 1.45; }
-#mmc-app .mmc-vazio { margin: auto 0; text-align: center; padding: 30px 10px; display: grid; gap: 6px; }
+#mmc-app .mmc-vazio { text-align: center; padding: 18px 10px; display: grid; gap: 6px; background: var(--mmc-fundo-2); border: 1px dashed var(--mmc-borda); border-radius: 10px; }
 
 /* ---------- Contato ---------- */
 #mmc-app .mmc-contato { display: flex; align-items: center; gap: 10px; }
@@ -158,3 +159,39 @@
 #mmc-app .mmc-outra-forma summary { cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--mmc-suave); margin-bottom: 8px; }
 #mmc-app .mmc-outra-forma summary:hover { color: var(--mmc-roxo); }
 #mmc-app [hidden] { display: none !important; }
+
+/* ---------- Capturar → lista → enviar ---------- */
+#mmc-app .mmc-fab-contagem {
+  position: absolute; bottom: -4px; left: -6px; min-width: 21px; height: 21px; padding: 0 5px; border-radius: 999px;
+  display: grid; place-items: center; background: var(--mmc-roxo); color: #fff; font-size: 11px; font-weight: 700;
+  border: 2px solid #fff; box-shadow: 0 2px 8px rgba(66, 47, 145, 0.45);
+}
+#mmc-app .mmc-btn-captura {
+  background: var(--mmc-rosa); border-color: var(--mmc-rosa); color: #fff; font-size: 14px; padding: 12px 14px;
+}
+#mmc-app .mmc-btn-captura:hover { background: #c4154e; }
+#mmc-app .mmc-conversa {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-radius: 9px;
+  background: var(--mmc-fundo-2); font-size: 12.5px; color: var(--mmc-texto);
+}
+#mmc-app .mmc-conversa span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#mmc-app .mmc-conversa small { color: var(--mmc-suave); flex-shrink: 0; }
+#mmc-app .mmc-conversa-lead { background: #ecfdf3; color: #157a3e; }
+#mmc-app .mmc-link-btn { border: 0; background: none; padding: 0; font: inherit; font-size: 12.5px; font-weight: 700; color: var(--mmc-rosa); cursor: pointer; flex-shrink: 0; }
+#mmc-app .mmc-link-btn:hover { text-decoration: underline; }
+#mmc-app .mmc-lista-topo { display: flex; align-items: center; justify-content: space-between; font-size: 12.5px; color: var(--mmc-suave); margin-top: 2px; }
+#mmc-app .mmc-lista-topo b { color: var(--mmc-roxo); }
+#mmc-app .mmc-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+#mmc-app .mmc-item { display: flex; align-items: center; gap: 9px; padding: 8px; border: 1px solid var(--mmc-borda); border-radius: 10px; background: #fff; }
+#mmc-app .mmc-item-lead { background: #f6fdf8; border-color: #cdeedb; }
+#mmc-app .mmc-avatar-p { width: 32px; height: 32px; font-size: 12px; }
+#mmc-app .mmc-item-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+#mmc-app .mmc-item-info .mmc-nome { font-size: 13px; }
+#mmc-app .mmc-item-info .mmc-tel { font-size: 12px; }
+#mmc-app .mmc-item .mmc-fonte { width: auto; max-width: 130px; font-size: 11.5px; padding: 2px 6px; border-radius: 6px; margin-top: 2px; align-self: flex-start; }
+#mmc-app .mmc-selo-mini { align-self: flex-start; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: #ecfdf3; color: #157a3e; margin-top: 2px; }
+#mmc-app .mmc-item-erro { margin: 2px 0 0; font-size: 11.5px; color: #b91c1c; }
+#mmc-app .mmc-item-acoes { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+#mmc-app .mmc-btn-mini { padding: 5px 10px; font-size: 12px; border-radius: 7px; text-decoration: none; }
+#mmc-app .mmc-icone-mini { width: 26px; height: 26px; border: 0; border-radius: 7px; background: none; color: var(--mmc-suave); cursor: pointer; font-size: 13px; }
+#mmc-app .mmc-icone-mini:hover { background: #fdeef3; color: #b3164a; }

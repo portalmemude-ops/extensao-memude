@@ -5,12 +5,15 @@ Os leads entram **direto no sistema** (a planilha recebe o espelho às 17h30).
 
 ## O que ela faz
 
-- **Login com a conta do Connect.** Mesmo e-mail e senha do core.memudecore.com.br. A senha nunca é guardada; a sessão renova sozinha.
-- **Ficha automática.** Ao abrir uma conversa, o painel mostra se o contato já é lead:
+- **Login pelo Connect.** Com o Connect logado no navegador, a extensão entra sozinha (sem senha). E-mail e senha ficam como alternativa; a sessão renova sozinha.
+- **Capturar → lista → enviar.** O botão **Capturar contato desta conversa** lê nome, telefone (com o 9º dígito corrigido) e a fonte pela etiqueta, e põe o contato numa lista.
+  - Na lista: **Enviar** manda um contato para o Connect; **Enviar todos** manda a lista inteira.
+  - A fonte pode ser trocada em cada item; quem já é lead aparece marcado e não é reenviado.
+  - A lista fica guardada no navegador até ser enviada; o número de pendentes aparece no botão flutuante.
+- **Ficha de quem já é lead** (botão **Ver ficha**):
   - status, empreendimento, responsável, próxima e última visita, qualificação e últimas anotações;
   - o ponto no botão flutuante fica **verde** quando o contato já é lead e **rosa** quando é contato novo.
-- **Cadastro em um clique.** Nome e telefone vêm da conversa (com o 9º dígito corrigido) e a fonte vem da etiqueta (Facebook/Instagram → Meta, Site → Cadastro…).
-  - O telefone já cadastrado nunca vira lead duplicado.
+- **Sem duplicados.** O telefone já cadastrado nunca vira lead duplicado.
 - **Agendar visita sem sair do WhatsApp:**
   - endereço e bairro do empreendimento e perfil do cliente já vêm preenchidos;
   - os corretores sugeridos aparecem pela nota, e o ocupado no horário fica bloqueado;
@@ -28,7 +31,7 @@ A extensão **nunca envia mensagens sozinha**: ela só coloca o texto no campo d
 | Atalho | Ação |
 | --- | --- |
 | `Alt+Shift+M` | Abre o painel no WhatsApp |
-| `Ctrl+Shift+S` | Cadastra no Connect o contato da conversa aberta |
+| `Ctrl+Shift+S` | Captura o contato da conversa aberta para a lista |
 
 ## Instalação
 
@@ -36,14 +39,14 @@ A extensão **nunca envia mensagens sozinha**: ela só coloca o texto no campo d
 2. Se a versão antiga (planilha) estiver instalada, clique em **Remover**.
 3. Clique em **Carregar sem compactação** e escolha esta pasta (ou a pasta descompactada do .zip).
 4. O ID continua `ncbcpgikkcljfgonclcegmehbmpnlncd`.
-5. Abra o WhatsApp Web, clique no botão MeMude e entre com sua conta do Connect.
+5. Com o Connect aberto e logado no navegador, a extensão entra sozinha.
 
 ## Estrutura
 
 ```
 manifest.json
 background/service-worker.js   login, chamadas ao sistema, cache e fila de segurança
-content/overlay.js|css         painel no WhatsApp (ficha, cadastro, visita, qualificação)
+content/overlay.js|css         painel no WhatsApp (captura, lista, ficha, visita)
 content/content.js             atalhos de teclado
 popup/                         login, números do dia, ajuda
 utils/config.js                endereços do sistema (chave pública)

@@ -1,8 +1,9 @@
 /* ============================================================
    MeMude Connect · Painel no WhatsApp Web
-   Ao abrir uma conversa, mostra se o contato já é lead no sistema.
-   Se for: ficha com status, visitas, qualificação, anotações, lembretes
-   e agendamento. Se não for: cadastro em um clique.
+   Fluxo principal: "Capturar" lê o contato da conversa aberta e põe
+   numa lista; dali o SDR envia um por vez ou todos de uma vez para o
+   Connect. Contato que já é lead tem a ficha (status, visita,
+   qualificação, anotações e lembretes).
    A extensão nunca envia mensagem sozinha: ela só coloca o texto no
    campo do WhatsApp para o SDR revisar e enviar.
    ============================================================ */
@@ -29,11 +30,13 @@
   };
 
   const est = {
-    sessao: null, opcoes: null, aberto: false, tela: 'contato',
+    sessao: null, opcoes: null, aberto: false, tela: 'lista',
     contato: null, ficha: null, carregando: false, erro: null, mensagem: null,
     corretores: null, buscandoCorretores: false, resumo: null, fila: 0, ultimoCabecalho: null,
+    capturados: [], capturando: false, enviandoTodos: false,
   };
   const cacheFicha = new Map(); // chave do telefone → { em, ficha }
+  const CHAVE_LISTA = 'memude_capturados'; // a lista fica guardada no navegador até ser enviada
 
   // ============================================================
   // Utilidades
@@ -113,6 +116,7 @@
       <button type="button" class="mmc-fab" id="mmc-fab" title="MeMude Connect (Alt+Shift+M)" aria-label="Abrir painel MeMude Connect">
         <img src="${chrome.runtime.getURL('icons/icon128.png')}" alt="" draggable="false">
         <span class="mmc-fab-ponto" id="mmc-app-ponto" hidden></span>
+        <span class="mmc-fab-contagem" id="mmc-app-contagem" title="Contatos capturados aguardando envio" hidden></span>
       </button>
       <section class="mmc-painel" id="mmc-painel" hidden aria-label="MeMude Connect">
         <header class="mmc-topo">
@@ -135,6 +139,7 @@
   }
 
   async function iniciar() {
+    await lerLista();
     await recarregarSessao();
     setInterval(vigiarConversa, 1200);
     setInterval(atualizarRodape, 60_000);
@@ -162,6 +167,101 @@
     }
   }
 
+  // ============================================================
+  // Lista de capturados (guardada no navegador até ser enviada)
+  // ============================================================
+  function lerLista() {
+    return new Promise((r) => chrome.storage.local.get(CHAVE_LISTA, (d) => {
+      est.capturados = Array.isArray(d && d[CHAVE_LISTA]) ? d[CHAVE_LISTA] : [];
+      atualizarContagem(); r();
+    }));
+  }
+  function salvarLista() {
+    atualizarContagem();
+    return new Promise((r) => chrome.storage.local.set({ [CHAVE_LISTA]: est.capturados }, r));
+  }
+  const pendentes = () => est.capturados.filter((i) => !i.existe);
+  function atualizarContagem() {
+    const b = document.getElementById('mmc-app-contagem');
+    if (!b) return;
+    const n = pendentes().length;
+    b.hidden = !n;
+    b.textContent = n > 99 ? '99+' : String(n);
+  }
+
+  /** Lê nome, telefone e etiqueta da conversa aberta e põe na lista. */
+  async function capturar() {
+    if (est.capturando) return;
+    const ex = window.__MEMUDE_EXTRACTOR;
+    if (!ex || !ex.isChatOpen()) { toast('Abra a conversa do cliente para capturar', 'erro'); return; }
+    if (ex.isGroupChat()) { toast('Conversa em grupo: abra a conversa individual', 'erro'); return; }
+    est.capturando = true; render();
+    try {
+      const r = await ex.extractActiveContact({ knownSources: CFG.ETIQUETAS });
+      const c = r.contact || {};
+      let telefone = c.phone || '';
+      if (telefone && PU) telefone = PU.add9thDigit(telefone);
+      if (!telefone) { toast('Não consegui ler o telefone desta conversa', 'erro'); return; }
+      const chave = PU ? PU.phoneKey(telefone) : telefone;
+      const nome = (c.name || '').replace(/^~\s*/, '').trim();
+      est.contato = { nome, telefone, etiqueta: c.source || '', fonte: FONTES.fonteDaEtiqueta(c.source) };
+      if (est.capturados.some((i) => i.chave === chave)) { toast('Este contato já está na lista', 'info'); return; }
+      const item = { chave, nome, telefone, etiqueta: c.source || '', fonte: FONTES.fonteDaEtiqueta(c.source) || '', em: Date.now() };
+      try {
+        const f = await enviar('BUSCAR', { telefone });
+        cacheFicha.set(chave, { em: Date.now(), ficha: f });
+        est.ficha = f; atualizarPonto();
+        if (f.existe) { item.existe = true; item.url = f.lead && f.lead.url; }
+      } catch (e) { /* sem conexão: confere de novo no envio */ }
+      est.capturados.unshift(item);
+      await salvarLista();
+      toast(item.existe ? 'Capturado · este contato já é lead no Connect' : `Capturado: ${nome || telefone}`, item.existe ? 'info' : 'sucesso');
+    } catch (e) {
+      toast(e.message || 'Falha ao capturar', 'erro');
+    } finally {
+      est.capturando = false; render();
+    }
+  }
+
+  /** Envia um capturado para o Connect. Retorna 'ok' | 'duplicado' | 'fila' | 'erro'. */
+  async function enviarCapturado(item) {
+    try {
+      const r = await enviar('CRIAR_LEAD', { nome: item.nome || item.telefone, telefone: item.telefone, fonte: item.fonte || null, status: 'NOVO' });
+      est.capturados = est.capturados.filter((i) => i.chave !== item.chave);
+      cacheFicha.delete(item.chave);
+      return r.na_fila ? 'fila' : r.duplicado ? 'duplicado' : 'ok';
+    } catch (e) {
+      item.erro = e.message;
+      return 'erro';
+    }
+  }
+
+  async function enviarUm(chave) {
+    const item = est.capturados.find((i) => i.chave === chave);
+    if (!item) return;
+    item.enviando = true; render();
+    const r = await enviarCapturado(item);
+    item.enviando = false;
+    await salvarLista(); render(); atualizarRodape();
+    const msg = { ok: 'Lead cadastrado no Connect', duplicado: 'Este telefone já era lead', fila: 'Sem conexão: guardado e será enviado sozinho', erro: item.erro };
+    toast(msg[r], r === 'erro' ? 'erro' : r === 'ok' ? 'sucesso' : 'info');
+    est.ultimoCabecalho = null; // atualiza o ponto da conversa aberta
+  }
+
+  async function enviarTodos() {
+    const lista = pendentes();
+    if (!lista.length || est.enviandoTodos) return;
+    est.enviandoTodos = true; render();
+    const conta = { ok: 0, duplicado: 0, fila: 0, erro: 0 };
+    for (const item of lista) conta[await enviarCapturado(item)] += 1;
+    est.enviandoTodos = false;
+    await salvarLista(); render(); atualizarRodape();
+    const partes = [conta.ok && `${conta.ok} cadastrado(s)`, conta.duplicado && `${conta.duplicado} já era(m) lead`,
+      conta.fila && `${conta.fila} na fila sem conexão`, conta.erro && `${conta.erro} com erro`].filter(Boolean);
+    toast(partes.join(' · '), conta.erro ? 'erro' : 'sucesso');
+    est.ultimoCabecalho = null;
+  }
+
   function abrir() { est.aberto = true; $('#mmc-painel').hidden = false; render(); atualizarRodape(); }
   function fechar() { est.aberto = false; $('#mmc-painel').hidden = true; }
 
@@ -176,7 +276,10 @@
   function vigiarConversa() {
     const atual = cabecalhoAtual();
     if (atual === est.ultimoCabecalho) return;
+    const trocouDeConversa = est.ultimoCabecalho !== null;
     est.ultimoCabecalho = atual;
+    // Ficha/visita são da conversa anterior: volta para a lista ao trocar de conversa.
+    if (trocouDeConversa && est.tela !== 'lista' && est.tela !== 'mensagem') est.tela = 'lista';
     if (!est.sessao) return;
     identificar(false);
   }
@@ -184,15 +287,18 @@
   async function identificar(completo) {
     const ex = window.__MEMUDE_EXTRACTOR;
     est.erro = null; est.mensagem = null; est.corretores = null;
-    if (!ex || !ex.isChatOpen()) { est.contato = null; est.ficha = null; est.tela = 'contato'; render(); return; }
-    if (ex.isGroupChat()) { est.contato = { grupo: true }; est.ficha = null; render(); return; }
-    est.carregando = true; est.tela = 'contato'; render();
+    if (!ex || !ex.isChatOpen()) { est.contato = null; est.ficha = null; atualizarPonto(); render(); return; }
+    if (ex.isGroupChat()) { est.contato = { grupo: true }; est.ficha = null; atualizarPonto(); render(); return; }
+    est.carregando = true; render();
     try {
       const r = await ex.extractActiveContact({ knownSources: CFG.ETIQUETAS, semGaveta: !completo });
       const c = r.contact || { name: '', phone: '', source: '' };
       let telefone = c.phone || '';
       if (telefone && PU) telefone = PU.add9thDigit(telefone);
-      est.contato = { nome: (c.name || '').replace(/^~\s*/, '').trim(), telefone, etiqueta: c.source || '', fonte: FONTES.fonteDaEtiqueta(c.source) };
+      const nome = (c.name || '').replace(/^~\s*/, '').trim();
+      // Leitura rápida sem telefone: aproveita o que já foi capturado desta conversa.
+      if (!telefone && nome) telefone = (est.capturados.find((i) => i.nome === nome) || {}).telefone || '';
+      est.contato = { nome, telefone, etiqueta: c.source || '', fonte: FONTES.fonteDaEtiqueta(c.source) };
       if (!telefone) { est.ficha = null; return; }
       const chave = PU ? PU.phoneKey(telefone) : telefone;
       const cache = cacheFicha.get(chave);
@@ -229,9 +335,59 @@
     const corpo = $('#mmc-corpo');
     if (!corpo) return;
     if (!est.sessao) { corpo.innerHTML = telaLogin(); renderRodape(); return; }
-    const telas = { contato: telaContato, visita: telaVisita, qualificacao: telaQualificacao, anotar: telaAnotar, mensagem: telaMensagem };
-    corpo.innerHTML = (est.erro ? `<div class="mmc-alerta">${esc(est.erro)}</div>` : '') + (telas[est.tela] || telaContato)();
+    const telas = { lista: telaLista, ficha: telaContato, visita: telaVisita, qualificacao: telaQualificacao, anotar: telaAnotar, mensagem: telaMensagem };
+    // Telas da ficha só existem para quem já é lead; sem ficha, volta para a lista.
+    if (!telas[est.tela] || (!['lista', 'ficha', 'mensagem'].includes(est.tela) && !est.ficha?.existe)) est.tela = 'lista';
+    corpo.innerHTML = (est.erro ? `<div class="mmc-alerta">${esc(est.erro)}</div>` : '') + telas[est.tela]();
     renderRodape();
+  }
+
+  /** Tela principal: capturar a conversa aberta e a lista para enviar. */
+  function telaLista() {
+    const c = est.contato;
+    let conversa;
+    if (!c) conversa = '<p class="mmc-sub">Abra a conversa do cliente e clique em capturar.</p>';
+    else if (c.grupo) conversa = '<p class="mmc-sub">Conversa em grupo: abra a conversa individual.</p>';
+    else if (est.ficha?.existe) {
+      conversa = `<div class="mmc-conversa mmc-conversa-lead"><span><b>${esc(est.ficha.lead?.nome || c.nome)}</b> já é lead no Connect</span>
+        <button type="button" class="mmc-link-btn" data-acao="ir" data-tela="ficha">Ver ficha</button></div>`;
+    } else {
+      conversa = `<div class="mmc-conversa"><span><b>${esc(c.nome || 'Conversa aberta')}</b>${c.telefone ? ` · ${esc(PU ? PU.formatPhoneBR(c.telefone) : c.telefone)}` : ''}</span>
+        ${est.carregando ? '<small>verificando…</small>' : est.ficha ? '<small>contato novo</small>' : ''}</div>`;
+    }
+    const fontes = (est.opcoes && est.opcoes.fontes) || FONTES.FONTES;
+    const lista = est.capturados;
+    const n = pendentes().length;
+    const itens = lista.map((i) => `
+      <li class="mmc-item ${i.existe ? 'mmc-item-lead' : ''}">
+        <div class="mmc-avatar mmc-avatar-p">${esc(iniciais(i.nome || '?'))}</div>
+        <div class="mmc-item-info">
+          <p class="mmc-nome">${esc(i.nome || 'Sem nome')}</p>
+          <p class="mmc-tel">${esc(PU ? PU.formatPhoneBR(i.telefone) : i.telefone)}</p>
+          ${i.existe ? '<span class="mmc-selo-mini">já é lead</span>'
+            : `<select class="mmc-fonte" data-campo="fonte-item" data-chave="${esc(i.chave)}" title="Fonte">${opcoesSelect(fontes, i.fonte, 'Fonte')}</select>`}
+          ${i.erro ? `<p class="mmc-item-erro">${esc(i.erro)}</p>` : ''}
+        </div>
+        <div class="mmc-item-acoes">
+          ${i.existe
+            ? (i.url ? `<a class="mmc-btn mmc-btn-mini" href="${esc(i.url)}" target="_blank" rel="noopener">Abrir</a>` : '')
+            : `<button type="button" class="mmc-btn mmc-btn-mini mmc-btn-primario" data-acao="enviar-item" data-chave="${esc(i.chave)}" ${i.enviando || est.enviandoTodos ? 'disabled' : ''}>${i.enviando ? '…' : 'Enviar'}</button>`}
+          <button type="button" class="mmc-icone-mini" data-acao="remover-item" data-chave="${esc(i.chave)}" title="Tirar da lista">✕</button>
+        </div>
+      </li>`).join('');
+    return `
+      <button type="button" class="mmc-btn mmc-btn-captura" data-acao="capturar" ${est.capturando ? 'disabled' : ''}>
+        ${est.capturando ? 'Capturando…' : 'Capturar contato desta conversa'}
+      </button>
+      ${conversa}
+      <div class="mmc-lista-topo">
+        <span>Capturados <b>${lista.length}</b></span>
+        ${lista.length ? '<button type="button" class="mmc-link-btn" data-acao="limpar-lista">Limpar lista</button>' : ''}
+      </div>
+      ${lista.length ? `<ul class="mmc-lista">${itens}</ul>`
+        : '<div class="mmc-vazio"><p class="mmc-sub">Nenhum contato capturado ainda.</p></div>'}
+      ${n ? `<button type="button" class="mmc-btn mmc-btn-primario" data-acao="enviar-todos" ${est.enviandoTodos ? 'disabled' : ''}>
+        ${est.enviandoTodos ? 'Enviando…' : `Enviar todos para o Connect (${n})`}</button>` : ''}`;
   }
 
   function telaLogin() {
@@ -267,16 +423,12 @@
       </div>`;
   }
 
+  /** Ficha do lead da conversa aberta (só para quem já está no Connect). */
   function telaContato() {
-    if (est.carregando) return `<div class="mmc-carregando"><span></span><span></span><span></span></div>`;
-    if (!est.contato) return vazio('Abra uma conversa', 'A ficha do contato aparece aqui sozinha.');
-    if (est.contato.grupo) return vazio('Conversa em grupo', 'Abra a conversa individual do cliente.');
-    if (!est.contato.telefone) {
-      return `${cartaoContato()}
-        <div class="mmc-alerta mmc-alerta-suave">Não achei o telefone desta conversa de forma rápida.</div>
-        <button type="button" class="mmc-btn mmc-btn-primario" data-acao="identificar-completo">Identificar contato</button>`;
-    }
-    return est.ficha?.existe ? telaFicha() : telaCadastro();
+    const voltar = '<button type="button" class="mmc-voltar" data-acao="ir" data-tela="lista">← Capturados</button>';
+    if (est.carregando) return `${voltar}<div class="mmc-carregando"><span></span><span></span><span></span></div>`;
+    if (!est.ficha?.existe) return `${voltar}${vazio('Sem ficha', 'Este contato ainda não está no Connect. Capture e envie pela lista.')}`;
+    return voltar + telaFicha();
   }
 
   function vazio(t, s) { return `<div class="mmc-vazio"><p class="mmc-titulo">${esc(t)}</p><p class="mmc-sub">${esc(s)}</p></div>`; }
@@ -284,25 +436,6 @@
   function opcoesSelect(lista, atual, vazioRotulo) {
     return (vazioRotulo ? `<option value="">${esc(vazioRotulo)}</option>` : '')
       + lista.map((v) => `<option value="${esc(v)}" ${v === atual ? 'selected' : ''}>${esc(v)}</option>`).join('');
-  }
-
-  function telaCadastro() {
-    const c = est.contato;
-    const o = est.opcoes || { fontes: FONTES.FONTES, status: ['NOVO'] };
-    return `
-      ${cartaoContato()}
-      <div class="mmc-selo mmc-selo-novo">Contato novo · ainda não está no Connect</div>
-      <form class="mmc-form" data-form="cadastro">
-        <label>Nome<input name="nome" value="${esc(c.nome)}" required minlength="2" maxlength="120"></label>
-        <label>WhatsApp<input name="telefone" value="${esc(PU ? PU.formatPhoneBR(c.telefone) : c.telefone)}" required></label>
-        <div class="mmc-duas">
-          <label>Fonte<select name="fonte">${opcoesSelect(o.fontes, c.fonte, 'Escolha')}</select></label>
-          <label>Status<select name="status">${opcoesSelect(o.status, 'NOVO')}</select></label>
-        </div>
-        <label>Empreendimento de interesse<input name="empreendimento" list="mmc-app-emps" placeholder="Digite para buscar" autocomplete="off"></label>
-        <label>Observação<textarea name="observacao" rows="2" maxlength="1000" placeholder="O que o cliente procura, renda, região…"></textarea></label>
-        <button type="submit" class="mmc-btn mmc-btn-primario">Cadastrar no Connect</button>
-      </form>`;
   }
 
   function linhaVisita(rotulo, v) {
@@ -352,7 +485,7 @@
     const perfil = [q.renda && `Renda ${q.renda}`, q.entrada_fgts, q.prazo && `Prazo ${q.prazo}`, q.finalidade, q.regiao && `Região ${q.regiao}`].filter(Boolean).join(' · ');
     const lista = est.corretores;
     return `
-      <button type="button" class="mmc-voltar" data-acao="ir" data-tela="contato">← ${esc(l.nome)}</button>
+      <button type="button" class="mmc-voltar" data-acao="ir" data-tela="ficha">← ${esc(l.nome)}</button>
       <form class="mmc-form" data-form="visita">
         <h2 class="mmc-titulo">Agendar visita</h2>
         <label>Empreendimento<input name="empreendimento" list="mmc-app-emps" value="${esc(emp?.nome || '')}" required autocomplete="off"></label>
@@ -383,7 +516,7 @@
     const l = est.ficha.lead;
     const q = l.qualificacao || {};
     return `
-      <button type="button" class="mmc-voltar" data-acao="ir" data-tela="contato">← ${esc(l.nome)}</button>
+      <button type="button" class="mmc-voltar" data-acao="ir" data-tela="ficha">← ${esc(l.nome)}</button>
       <form class="mmc-form" data-form="qualificacao">
         <h2 class="mmc-titulo">Qualificação</h2>
         <label>Renda familiar<select name="renda">${opcoesSelect(RENDAS, q.renda, 'Não informada')}</select></label>
@@ -400,7 +533,7 @@
   function telaAnotar() {
     const l = est.ficha.lead;
     return `
-      <button type="button" class="mmc-voltar" data-acao="ir" data-tela="contato">← ${esc(l.nome)}</button>
+      <button type="button" class="mmc-voltar" data-acao="ir" data-tela="ficha">← ${esc(l.nome)}</button>
       <form class="mmc-form" data-form="anotar">
         <h2 class="mmc-titulo">Nova anotação</h2>
         <p class="mmc-sub">Entra no topo das observações do lead, com data e seu nome.</p>
@@ -417,7 +550,7 @@
       <div class="mmc-acoes">
         <button type="button" class="mmc-btn mmc-btn-primario" data-acao="inserir">Colocar na conversa</button>
         <button type="button" class="mmc-btn" data-acao="copiar">Copiar</button>
-        <button type="button" class="mmc-btn" data-acao="ir" data-tela="contato">Voltar</button>
+        <button type="button" class="mmc-btn" data-acao="ir" data-tela="ficha">Voltar</button>
       </div>`;
   }
 
@@ -492,7 +625,18 @@
       await carregarOpcoes(true);
       identificar(false); atualizarRodape(); return;
     }
-    if (acao === 'identificar-completo') return identificar(true);
+    if (acao === 'capturar') return capturar();
+    if (acao === 'enviar-item') return enviarUm(alvo.dataset.chave);
+    if (acao === 'enviar-todos') return enviarTodos();
+    if (acao === 'remover-item') {
+      est.capturados = est.capturados.filter((i) => i.chave !== alvo.dataset.chave);
+      await salvarLista(); render(); return;
+    }
+    if (acao === 'limpar-lista') {
+      const n = pendentes().length;
+      if (n && !window.confirm(`Tirar ${n} contato(s) ainda não enviado(s) da lista?`)) return;
+      est.capturados = []; await salvarLista(); render(); return;
+    }
     if (acao === 'entrar-connect') {
       alvo.disabled = true; alvo.textContent = 'Entrando…';
       try {
@@ -523,6 +667,11 @@
   }
 
   async function aoMudar(e) {
+    if (e.target.matches('select[data-campo="fonte-item"]')) {
+      const item = est.capturados.find((i) => i.chave === e.target.dataset.chave);
+      if (item) { item.fonte = e.target.value; await salvarLista(); }
+      return;
+    }
     if (e.target.matches('select[data-campo="status"]')) {
       const status = e.target.value;
       try {
@@ -563,29 +712,15 @@
         render(); atualizarRodape();
         return;
       }
-      if (tipo === 'cadastro') {
-        const emp = v.empreendimento ? empPorNome(v.empreendimento) : null;
-        const r = await enviar('CRIAR_LEAD', {
-          nome: v.nome, telefone: v.telefone, fonte: v.fonte || null, status: v.status,
-          empreendimento_id: emp ? emp.id : null, empreendimento: emp ? undefined : v.empreendimento, observacao: v.observacao || null,
-        });
-        if (r.na_fila) { toast(r.aviso, 'info'); atualizarRodape(); return; }
-        toast(r.duplicado ? 'Este telefone já era lead: abrindo a ficha' : 'Lead cadastrado no Connect', 'sucesso');
-        guardarFicha(r.lead, null);
-        cacheFicha.delete(PU.phoneKey(est.contato.telefone));
-        await identificar(false);
-        atualizarRodape();
-        return;
-      }
       if (tipo === 'qualificacao') {
         const qualificacao = { renda: v.renda || null, entrada_fgts: v.entrada_fgts || null, prazo: v.prazo || null, finalidade: v.finalidade || null, regiao: v.regiao.trim() || null };
         const r = await enviar('ATUALIZAR_LEAD', { lead_id: est.ficha.lead.id, qualificacao });
-        guardarFicha(r.lead); est.tela = 'contato'; toast('Qualificação salva', 'sucesso'); render();
+        guardarFicha(r.lead); est.tela = 'ficha'; toast('Qualificação salva', 'sucesso'); render();
         return;
       }
       if (tipo === 'anotar') {
         const r = await enviar('ATUALIZAR_LEAD', { lead_id: est.ficha.lead.id, anotacao: v.anotacao });
-        guardarFicha(r.lead); est.tela = 'contato'; toast('Anotação salva', 'sucesso'); render();
+        guardarFicha(r.lead); est.tela = 'ficha'; toast('Anotação salva', 'sucesso'); render();
         return;
       }
       if (tipo === 'visita') {
@@ -621,15 +756,11 @@
   // ============================================================
   // API para o content script (atalhos)
   // ============================================================
+  /** Atalho Ctrl+Shift+S: captura a conversa aberta para a lista. */
   async function cadastroRapido() {
     abrir();
-    await identificar(false);
-    if (est.ficha && !est.ficha.existe && est.contato?.telefone) {
-      const f = $('form[data-form="cadastro"]');
-      if (f) f.requestSubmit();
-    } else if (est.ficha?.existe) {
-      toast('Este contato já é lead', 'info');
-    }
+    est.tela = 'lista';
+    await capturar();
   }
 
   window.__MEMUDE_PAINEL = { abrir, fechar, cadastroRapido, inserirNaConversa, recarregarSessao, vivo };
