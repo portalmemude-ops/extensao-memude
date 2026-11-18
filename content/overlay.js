@@ -68,7 +68,28 @@
     });
   }
 
+  // Ícones no traço do Connect (lucide)
+  const ICONE = {
+    atualizar: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>',
+    fechar: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>',
+    capturar: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/></svg>',
+    enviar: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>',
+    lixo: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+    vazio: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  };
+
+  /** Aviso: dentro do painel quando ele está aberto (não cobre nada); flutuante quando fechado. */
+  let timerAviso = null;
   function toast(texto, tipo = 'info') {
+    const faixa = document.getElementById('mmc-app-aviso');
+    if (est.aberto && faixa) {
+      faixa.className = `mmc-aviso mmc-aviso-${tipo}`;
+      faixa.textContent = texto;
+      faixa.hidden = false;
+      clearTimeout(timerAviso);
+      timerAviso = setTimeout(() => { faixa.hidden = true; }, tipo === 'erro' ? 6000 : 3500);
+      return;
+    }
     const t = document.createElement('div');
     t.className = `mmc-toast mmc-toast-${tipo}`;
     t.textContent = texto;
@@ -122,10 +143,11 @@
         <div class="mmc-topo">
           <div class="mmc-marca"><img src="${chrome.runtime.getURL('icons/icon48.png')}" alt=""><span>MeMude <b>Connect</b></span></div>
           <div class="mmc-topo-acoes">
-            <button type="button" class="mmc-icone" data-acao="atualizar" title="Atualizar">⟳</button>
-            <button type="button" class="mmc-icone" data-acao="fechar" title="Fechar (Esc)">✕</button>
+            <button type="button" class="mmc-icone" data-acao="atualizar" title="Atualizar" aria-label="Atualizar">${ICONE.atualizar}</button>
+            <button type="button" class="mmc-icone" data-acao="fechar" title="Fechar (Esc)" aria-label="Fechar">${ICONE.fechar}</button>
           </div>
         </div>
+        <div class="mmc-aviso" id="mmc-app-aviso" role="status" hidden></div>
         <div class="mmc-corpo" id="mmc-corpo"></div>
         <div class="mmc-rodape" id="mmc-rodape"></div>
       </div>
@@ -134,7 +156,7 @@
     raiz.addEventListener('click', aoClicar);
     raiz.addEventListener('change', aoMudar);
     raiz.addEventListener('submit', aoEnviar);
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && est.aberto) fechar(); });
+    document.addEventListener('keydown', (e) => { if (e.isTrusted && e.key === 'Escape' && est.aberto) fechar(); });
     iniciar();
   }
 
@@ -201,7 +223,7 @@
       const c = r.contact || {};
       let telefone = c.phone || '';
       if (telefone && PU) telefone = PU.add9thDigit(telefone);
-      if (!telefone) { toast('Não consegui ler o telefone desta conversa', 'erro'); return; }
+      if (!telefone) { toast('Não consegui ler o telefone. Clique no nome do contato no topo da conversa (abre os dados) e capture de novo.', 'erro'); return; }
       const chave = PU ? PU.phoneKey(telefone) : telefone;
       const nome = (c.name || '').replace(/^~\s*/, '').trim();
       est.contato = { nome, telefone, etiqueta: c.source || '', fonte: FONTES.fonteDaEtiqueta(c.source) };
@@ -342,52 +364,69 @@
     renderRodape();
   }
 
-  /** Tela principal: capturar a conversa aberta e a lista para enviar. */
+  /** Tela principal: conversa aberta, botão Capturar e a lista para enviar. */
   function telaLista() {
     const c = est.contato;
     let conversa;
-    if (!c) conversa = '<p class="mmc-sub">Abra a conversa do cliente e clique em capturar.</p>';
-    else if (c.grupo) conversa = '<p class="mmc-sub">Conversa em grupo: abra a conversa individual.</p>';
-    else if (est.ficha?.existe) {
-      conversa = `<div class="mmc-conversa mmc-conversa-lead"><span><b>${esc(est.ficha.lead?.nome || c.nome)}</b> já é lead no Connect</span>
-        <button type="button" class="mmc-link-btn" data-acao="ir" data-tela="ficha">Ver ficha</button></div>`;
+    if (!c) {
+      conversa = `<div class="mmc-conversa mmc-conversa-vazia"><p class="mmc-sub">Abra a conversa do cliente para capturar.</p></div>`;
+    } else if (c.grupo) {
+      conversa = `<div class="mmc-conversa mmc-conversa-vazia"><p class="mmc-sub">Conversa em grupo: abra a conversa individual do cliente.</p></div>`;
     } else {
-      conversa = `<div class="mmc-conversa"><span><b>${esc(c.nome || 'Conversa aberta')}</b>${c.telefone ? ` · ${esc(PU ? PU.formatPhoneBR(c.telefone) : c.telefone)}` : ''}</span>
-        ${est.carregando ? '<small>verificando…</small>' : est.ficha ? '<small>contato novo</small>' : ''}</div>`;
+      const lead = est.ficha?.existe ? est.ficha.lead : null;
+      const nome = lead?.nome || c.nome || 'Conversa aberta';
+      const tel = c.telefone ? (PU ? PU.formatPhoneBR(c.telefone) : c.telefone) : 'o telefone é lido ao capturar';
+      const naLista = c.telefone && PU && est.capturados.some((i) => i.chave === PU.phoneKey(c.telefone) && !i.existe);
+      const selo = est.carregando ? '<span class="mmc-badge">verificando…</span>'
+        : lead ? '<span class="mmc-badge mmc-badge-lead">Já é lead</span>'
+        : naLista ? '<span class="mmc-badge mmc-badge-lista">Na lista</span>'
+        : est.ficha ? '<span class="mmc-badge mmc-badge-novo">Contato novo</span>' : '';
+      conversa = `
+        <div class="mmc-conversa">
+          <div class="mmc-avatar">${esc(iniciais(nome))}</div>
+          <div class="mmc-conversa-info">
+            <p class="mmc-rotulo">Conversa aberta</p>
+            <p class="mmc-nome">${esc(nome)}</p>
+            <p class="mmc-tel">${esc(tel)}</p>
+          </div>
+          <div class="mmc-conversa-lado">${selo}${lead ? '<button type="button" class="mmc-link-btn" data-acao="ir" data-tela="ficha">Ver ficha</button>' : ''}</div>
+        </div>`;
     }
     const fontes = (est.opcoes && est.opcoes.fontes) || FONTES.FONTES;
     const lista = est.capturados;
     const n = pendentes().length;
     const itens = lista.map((i) => `
-      <li class="mmc-item ${i.existe ? 'mmc-item-lead' : ''}">
+      <li class="mmc-item ${i.existe ? 'mmc-item-lead' : ''} ${i.erro ? 'mmc-item-com-erro' : ''}">
         <div class="mmc-avatar mmc-avatar-p">${esc(iniciais(i.nome || '?'))}</div>
         <div class="mmc-item-info">
           <p class="mmc-nome">${esc(i.nome || 'Sem nome')}</p>
           <p class="mmc-tel">${esc(PU ? PU.formatPhoneBR(i.telefone) : i.telefone)}</p>
-          ${i.existe ? '<span class="mmc-selo-mini">já é lead</span>'
-            : `<select class="mmc-fonte" data-campo="fonte-item" data-chave="${esc(i.chave)}" title="Fonte">${opcoesSelect(fontes, i.fonte, 'Fonte')}</select>`}
+          ${i.existe ? '<span class="mmc-badge mmc-badge-lead">Já é lead</span>'
+            : `<select class="mmc-fonte" data-campo="fonte-item" data-chave="${esc(i.chave)}" title="Fonte do lead">${opcoesSelect(fontes, i.fonte, 'Fonte…')}</select>`}
           ${i.erro ? `<p class="mmc-item-erro">${esc(i.erro)}</p>` : ''}
         </div>
         <div class="mmc-item-acoes">
           ${i.existe
             ? (i.url ? `<a class="mmc-btn mmc-btn-mini" href="${esc(i.url)}" target="_blank" rel="noopener">Abrir</a>` : '')
-            : `<button type="button" class="mmc-btn mmc-btn-mini mmc-btn-primario" data-acao="enviar-item" data-chave="${esc(i.chave)}" ${i.enviando || est.enviandoTodos ? 'disabled' : ''}>${i.enviando ? '…' : 'Enviar'}</button>`}
-          <button type="button" class="mmc-icone-mini" data-acao="remover-item" data-chave="${esc(i.chave)}" title="Tirar da lista">✕</button>
+            : `<button type="button" class="mmc-btn mmc-btn-mini mmc-btn-suave" data-acao="enviar-item" data-chave="${esc(i.chave)}" ${i.enviando || est.enviandoTodos ? 'disabled' : ''}>${i.enviando ? 'Enviando…' : 'Enviar'}</button>`}
+          <button type="button" class="mmc-icone-mini" data-acao="remover-item" data-chave="${esc(i.chave)}" title="Tirar da lista" aria-label="Tirar da lista">${ICONE.lixo}</button>
         </div>
       </li>`).join('');
     return `
-      <button type="button" class="mmc-btn mmc-btn-captura" data-acao="capturar" ${est.capturando ? 'disabled' : ''}>
-        ${est.capturando ? 'Capturando…' : 'Capturar contato desta conversa'}
-      </button>
       ${conversa}
-      <div class="mmc-lista-topo">
-        <span>Capturados <b>${lista.length}</b></span>
-        ${lista.length ? '<button type="button" class="mmc-link-btn" data-acao="limpar-lista">Limpar lista</button>' : ''}
+      <button type="button" class="mmc-btn mmc-btn-primario mmc-btn-captura" data-acao="capturar" ${est.capturando || !c || c.grupo ? 'disabled' : ''}>
+        ${ICONE.capturar}<span>${est.capturando ? 'Abrindo dados do contato…' : 'Capturar contato'}</span>
+      </button>
+      <div class="mmc-secao">
+        <div class="mmc-lista-topo">
+          <span class="mmc-secao-titulo">Capturados <span class="mmc-contador">${lista.length}</span></span>
+          ${lista.length ? '<button type="button" class="mmc-link-btn mmc-link-suave" data-acao="limpar-lista">Limpar</button>' : ''}
+        </div>
+        ${lista.length ? `<ul class="mmc-lista">${itens}</ul>`
+          : `<div class="mmc-vazio">${ICONE.vazio}<p class="mmc-sub">Nenhum contato capturado.<br>Abra uma conversa e clique em <b>Capturar contato</b>.</p></div>`}
       </div>
-      ${lista.length ? `<ul class="mmc-lista">${itens}</ul>`
-        : '<div class="mmc-vazio"><p class="mmc-sub">Nenhum contato capturado ainda.</p></div>'}
-      ${n ? `<button type="button" class="mmc-btn mmc-btn-primario" data-acao="enviar-todos" ${est.enviandoTodos ? 'disabled' : ''}>
-        ${est.enviandoTodos ? 'Enviando…' : `Enviar todos para o Connect (${n})`}</button>` : ''}`;
+      ${n ? `<button type="button" class="mmc-btn mmc-btn-destaque" data-acao="enviar-todos" ${est.enviandoTodos ? 'disabled' : ''}>
+        ${ICONE.enviar}<span>${est.enviandoTodos ? 'Enviando…' : `Enviar todos para o Connect (${n})`}</span></button>` : ''}`;
   }
 
   function telaLogin() {
@@ -560,9 +599,9 @@
     if (!est.sessao) { r.innerHTML = ''; return; }
     const s = est.resumo;
     r.innerHTML = `
-      ${s ? `<span title="Leads seus cadastrados hoje"><b>${s.leads_hoje}</b> leads</span>
-             <span title="Visitas que você agendou hoje"><b>${s.visitas_agendadas_hoje}</b> visitas</span>
-             <span title="Tarefas e lembretes para hoje na tela Hoje"><b>${s.tarefas_pendentes}</b> tarefas</span>` : '<span>Seu dia</span>'}
+      <div class="mmc-stat" title="Leads seus cadastrados hoje"><b>${s ? s.leads_hoje : '–'}</b><span>leads hoje</span></div>
+      <div class="mmc-stat" title="Visitas que você agendou hoje"><b>${s ? s.visitas_agendadas_hoje : '–'}</b><span>visitas</span></div>
+      <div class="mmc-stat" title="Tarefas e lembretes para hoje na tela Hoje"><b>${s ? s.tarefas_pendentes : '–'}</b><span>tarefas</span></div>
       ${est.fila ? `<button type="button" class="mmc-chip mmc-chip-alerta" data-acao="enviar-fila" title="Cadastros guardados sem conexão">${est.fila} na fila · enviar</button>` : ''}`;
   }
 

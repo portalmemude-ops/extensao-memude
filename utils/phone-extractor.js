@@ -242,44 +242,94 @@
   // ============================================================
   // Open the drawer by clicking the header
   // ============================================================
+  // Botões do header que NUNCA podem ser clicados (ligação, vídeo, pesquisa, menu, listas…)
+  const NAO_CLICAR = /chamada|liga[çc][ãa]o|v[íi]deo|video|call|pesquis|search|menu|mais op[çc]|more option|lista|list|etiquet|label|silenc|mute/i;
+
+  function seguroParaClicar(el, header) {
+    if (!el || !header.contains(el)) return false;
+    for (let n = el; n && n !== header; n = n.parentElement) {
+      // (o title não entra: no nome do contato ele é o próprio nome)
+      const rotulo = `${n.getAttribute('aria-label') || ''} ${n.getAttribute('data-icon') || ''} ${n.getAttribute('data-testid') || ''}`;
+      if (NAO_CLICAR.test(rotulo) && !/contato|contact|perfil|profile|info/i.test(rotulo)) return false;
+      // Botão só de ícone (ligar, vídeo, menu…) nunca
+      if (n.tagName === 'BUTTON' && !(n.innerText || '').trim() && !/contato|contact|perfil|profile|info/i.test(rotulo)) return false;
+    }
+    return true;
+  }
+
+  /** Alvos de clique que abrem "Dados do contato", do mais específico ao mais genérico. */
+  function alvosDoCabecalho(header) {
+    const lista = [];
+    const add = (el) => { if (el && !lista.includes(el) && seguroParaClicar(el, header)) lista.push(el); };
+    add(header.querySelector('[data-testid="conversation-header-contact-info"]'));
+    add(header.querySelector('[data-testid="conversation-info-header"]'));
+    add(header.querySelector('[data-testid="conversation-info-header-chat-title"]'));
+    header.querySelectorAll('[aria-label]').forEach((el) => {
+      if (/dados do (contato|perfil)|informa[çc][õo]es do contato|contact info|profile (details|info)|datos del contacto/i.test(el.getAttribute('aria-label'))) add(el);
+    });
+    // Nome do contato no topo (o mesmo lugar onde a pessoa clica com o mouse)
+    const nome = [...header.querySelectorAll('span[title], span[dir="auto"]')]
+      .find((s) => { const t = (s.getAttribute('title') || s.textContent || '').trim(); return t.length >= 2 && !isWhatsAppUIText(t); });
+    add(nome);
+    // Foto do contato
+    const foto = header.querySelector('img');
+    add(foto);
+    if (foto) add(foto.parentElement);
+    // Primeiro bloco do header (foto + nome)
+    add(header.firstElementChild);
+    return lista;
+  }
+
+  /** Clique "de verdade" (o WhatsApp às vezes ignora só o .click()). */
+  function clicar(el) {
+    const r = el.getBoundingClientRect();
+    const base = { bubbles: true, cancelable: true, view: window, clientX: r.left + Math.min(r.width / 2, 40), clientY: r.top + r.height / 2, button: 0 };
+    try { el.dispatchEvent(new PointerEvent('pointerdown', { ...base, pointerType: 'mouse' })); } catch (e) { /* sem PointerEvent */ }
+    el.dispatchEvent(new MouseEvent('mousedown', base));
+    try { el.dispatchEvent(new PointerEvent('pointerup', { ...base, pointerType: 'mouse' })); } catch (e) { /* sem PointerEvent */ }
+    el.dispatchEvent(new MouseEvent('mouseup', base));
+    el.dispatchEvent(new MouseEvent('click', base));
+  }
+
+  const TEXTO_GAVETA = /dados do contato|dados do perfil|informa[çc][õo]es do contato|contact info|profile details|datos del contacto|dados da empresa|business info/i;
+
+  /** Painel lateral NOVO (que não existia antes do clique), só dentro do WhatsApp. */
+  function gavetaNova(antes) {
+    const app = document.getElementById('app') || document.body;
+    const candidatos = [findDrawer(), ...app.querySelectorAll('[data-testid="contact-info-drawer"], [data-testid="panel-right"], aside, section, div[role="region"], span[role="region"]')]
+      .filter((e) => e && !e.closest('#mmc-app, #memude-overlay, #side, #pane-side'));
+    return candidates(candidatos, antes);
+  }
+  function candidates(lista, antes) {
+    // Preferência: elemento novo cujo texto parece "Dados do contato"
+    const novos = lista.filter((e) => !antes.has(e));
+    return novos.find((e) => TEXTO_GAVETA.test((e.textContent || '').slice(0, 400)))
+      || lista.find((e) => TEXTO_GAVETA.test((e.textContent || '').slice(0, 400)))
+      || novos[0] || null;
+  }
+
   async function openDrawer(header) {
-    const clickTarget =
-         header.querySelector('[data-testid="conversation-header-contact-info"]')
-      || header.querySelector('[aria-label*="Dados do contato" i]')
-      || header.querySelector('[aria-label*="Informações do contato" i]')
-      || header.querySelector('[aria-label*="Contact info" i]')
-      || header.querySelector('[aria-label*="Datos del contacto" i]')
-      || header.querySelector('div[role="button"]')
-      || header.querySelector('[role="button"]')
-      || header.querySelector('div[tabindex="-1"]')
-      || header.querySelector('span[title]')?.closest('[role="button"]')
-      || header;
+    const app = document.getElementById('app') || document.body;
+    const antes = new Set(app.querySelectorAll('aside, section, div[role="region"], span[role="region"], [data-testid="panel-right"]'));
+    const alvos = alvosDoCabecalho(header);
+    log.debug(`Abrindo dados do contato: ${alvos.length} alvo(s) de clique`);
 
-    log.debug('Clicking header to open contact drawer...');
-    clickTarget.click();
-
-    // Wait slightly for animation to start
-    await waitMs(300);
-
-    let drawer = findDrawer();
-    if (!drawer) {
-      // Retry with a MutationObserver — só dentro do WhatsApp (#app), nunca no painel da extensão
-      const app = document.getElementById('app') || document.body;
-      drawer = await waitForElement(
-        '[data-testid="contact-info-drawer"], [data-testid="panel-right"], aside, section',
-        app,
-        4000
-      );
+    for (const alvo of alvos) {
+      clicar(alvo);
+      // Espera o painel aparecer (até 2,5 s por tentativa)
+      for (let t = 0; t < 17; t += 1) {
+        await waitMs(150);
+        const drawer = gavetaNova(antes);
+        if (drawer) {
+          // Conteúdo (telefone) carrega logo depois do painel
+          for (let k = 0; k < 10 && !extractPhoneFromDrawerContent(drawer); k += 1) await waitMs(150);
+          log.debug('Dados do contato abertos');
+          return drawer;
+        }
+      }
+      log.debug('Este alvo não abriu os dados do contato; tentando o próximo');
     }
-
-    if (drawer) {
-      // Wait extra for drawer content to fully render
-      // Business profiles load additional sections asynchronously
-      await waitMs(800);
-      log.debug('Drawer opened and content loaded');
-    }
-
-    return drawer;
+    return null;
   }
 
   // ============================================================
@@ -435,8 +485,10 @@
    * Garante um drawer aberto. Marca quando abrimos para fechar depois.
    */
   async function ensureDrawer(header) {
+    // Só aproveita um painel já aberto se ele for mesmo "Dados do contato"
+    // (o WhatsApp tem outras barras laterais que casariam com seletores genéricos).
     let drawer = findDrawer();
-    if (drawer) {
+    if (drawer && (TEXTO_GAVETA.test((drawer.textContent || '').slice(0, 400)) || extractPhoneFromDrawerContent(drawer))) {
       await waitMs(300);
       return drawer;
     }
@@ -659,20 +711,22 @@
   // ============================================================
   function closeDrawer(drawer) {
     try {
-      const closeBtn = drawer.querySelector('[data-testid="btn-closer-drawer"]')
-                    || drawer.querySelector('[data-testid="back"]')
-                    || drawer.querySelector('[data-testid="x-viewer"]')
-                    || drawer.querySelector('[data-icon="x"]')
-                    || drawer.querySelector('[data-icon="x-viewer"]')
-                    || drawer.querySelector('button[aria-label="Close"]')
-                    || drawer.querySelector('button[aria-label="Fechar"]')
-                    || drawer.querySelector('header button')
-                    || drawer.querySelector('header [role="button"]')
-                    || drawer.querySelector('[data-testid="back-btn"]');
+      const achar = (raiz) => raiz && (raiz.querySelector('[data-testid="btn-closer-drawer"]')
+                    || raiz.querySelector('[data-testid="back"]')
+                    || raiz.querySelector('[data-testid="x-viewer"]')
+                    || raiz.querySelector('[data-icon="x"]')
+                    || raiz.querySelector('[data-icon="x-viewer"]')
+                    || raiz.querySelector('[data-icon="close"]')
+                    || raiz.querySelector('[aria-label="Close"], [aria-label="Fechar"], [aria-label="Cerrar"]')
+                    || raiz.querySelector('header button')
+                    || raiz.querySelector('header [role="button"]')
+                    || raiz.querySelector('[data-testid="back-btn"]'));
+      // o X às vezes fica no bloco de cima do painel, um nível acima
+      const closeBtn = achar(drawer) || achar(drawer.parentElement);
 
       if (closeBtn) {
         log.debug('Closing drawer...');
-        closeBtn.click();
+        clicar(closeBtn.closest('button, [role="button"]') || closeBtn);
       } else {
         log.debug('No close button found, pressing Escape...');
         document.dispatchEvent(new KeyboardEvent('keydown', {
