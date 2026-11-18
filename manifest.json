@@ -1,21 +1,19 @@
 {
   "manifest_version": 3,
-  "name": "MeMude - WhatsApp to Sheets",
-  "version": "1.0.0",
-  "description": "Extraia contatos do WhatsApp Web e exporte automaticamente para Google Sheets",
+  "name": "MeMude Connect · WhatsApp",
+  "version": "2.0.0",
+  "description": "Cadastre leads, agende visitas e acompanhe a ficha do cliente no MeMude Connect direto do WhatsApp Web",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAs0ECnhP6Td7uBiWUMz9VrsC3WM4TpaLO9iZQZnoGMIlOxlhe4VS80padebKvRtrK4XqbArAFRwwPOo4L/j9E6uF1IZDJI8znJaIg1OPTl5bKTUs0tciwBgdfsH2z3StymSI82dd74esA4SRx96DUvxIdXTuY8Gso6vWyT5ubd0/isCUcKLE46AGys6RszwRzehNmF5f+zcZOCFdf4eP3g5zSMmvI6kaMQZaRAFA31VU/MGyQnbi7YySxWPBmp0+2unEQKuv+sdmFvM55jEaBJ2G7UEMSCFubm4Aw6MCLlzRlR4z7Zg7mgUKOiVLNRNnbnKxouSCzqNKLS/aXDzEcxQIDAQAB",
   "permissions": [
     "storage",
-    "identity",
     "activeTab",
     "scripting",
-    "tabs"
+    "tabs",
+    "alarms"
   ],
   "host_permissions": [
     "https://web.whatsapp.com/*",
-    "https://sheets.googleapis.com/*",
-    "https://www.googleapis.com/*",
-    "https://oauth2.googleapis.com/*"
+    "https://oxybasvtphosdmlmrfnb.supabase.co/*"
   ],
   "background": {
     "service_worker": "background/service-worker.js"
@@ -26,8 +24,10 @@
         "https://web.whatsapp.com/*"
       ],
       "js": [
+        "utils/config.js",
         "utils/logger.js",
         "utils/phone-utils.js",
+        "utils/fontes.js",
         "utils/phone-extractor.js",
         "content/overlay.js",
         "content/content.js"
@@ -44,23 +44,34 @@
         "default": "Ctrl+Shift+S",
         "mac": "Command+Shift+S"
       },
-      "description": "Capturar contato do chat aberto e enviar"
+      "description": "Cadastrar no Connect o contato da conversa aberta"
     },
     "open-overlay": {
       "suggested_key": {
         "default": "Alt+Shift+M",
         "mac": "Command+Shift+Y"
       },
-      "description": "Abrir o painel MeMude no WhatsApp"
+      "description": "Abrir o painel MeMude Connect no WhatsApp"
     }
   },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "icons/*.png"
+      ],
+      "matches": [
+        "https://web.whatsapp.com/*"
+      ]
+    }
+  ],
   "action": {
     "default_popup": "popup/popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
-    }
+    },
+    "default_title": "MeMude Connect"
   },
   "icons": {
     "16": "icons/icon16.png",

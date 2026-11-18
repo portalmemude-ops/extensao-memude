@@ -288,7 +288,50 @@
   //   3) Data-attrs do #main / DOM scan / cache (fallbacks p/ telefone)
   //   4) Drawer só quando ainda faltar algo (lento por causa do click)
   // ============================================================
-  async function extractActiveContact() {
+  // Fontes reconhecidas por padrão quando o caller não passa uma lista.
+  // NÃO inclui "WhatsApp" de propósito (a página inteira casaria).
+  const DEFAULT_SOURCES = ['Google', 'Facebook', 'Instagram', 'Indicação', 'Site', 'OLX', 'Tráfego', 'Orgânico'];
+
+  function escapeRegex(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  /**
+   * Lê a etiqueta (Fonte) da conversa aberta. Procura os nomes conhecidos
+   * dentro do header do chat, da linha selecionada na lista e de elementos
+   * marcados como etiqueta. Retorna o primeiro que casar (canônico) ou ''.
+   * @param {string[]} knownSources
+   * @returns {string}
+   */
+  function extractLabel(knownSources) {
+    const sources = (Array.isArray(knownSources) && knownSources.length) ? knownSources : DEFAULT_SOURCES;
+
+    const scopes = [];
+    const header = document.querySelector('#main header');
+    if (header) scopes.push(header);
+
+    // Linha selecionada na lista de conversas (etiqueta costuma aparecer aqui).
+    const selRow = document.querySelector('#pane-side [aria-selected="true"], #pane-side [role="row"][tabindex="0"]');
+    if (selRow) scopes.push(selRow);
+
+    // Elementos explicitamente marcados como etiqueta/label.
+    document.querySelectorAll('[aria-label*="etiqueta" i], [aria-label*="label" i], [data-testid*="label" i]')
+      .forEach(el => scopes.push(el));
+
+    const text = scopes.map(s => s.textContent || '').join('\n');
+
+    for (const src of sources) {
+      const re = new RegExp('\\b' + escapeRegex(src) + '\\b', 'i');
+      if (re.test(text)) {
+        log.debug(`Label/Fonte detectada: "${src}"`);
+        return src;
+      }
+    }
+    log.debug('Nenhuma etiqueta de Fonte encontrada');
+    return '';
+  }
+
+  async function extractActiveContact(opts = {}) {
     log.debug('=== Starting extraction ===');
 
     if (!isChatOpen()) return { error: 'NO_CHAT_OPEN', contact: null };
@@ -321,7 +364,8 @@
 
     // --- 4) Drawer: usado só se faltar telefone OU se temos só o telefone
     //                e queremos descobrir o nome ---
-    if (header && (!phone || !name)) {
+    // opts.semGaveta: leitura rápida (troca de conversa) sem abrir o painel de dados do contato
+    if (header && !opts.semGaveta && (!phone || !name)) {
       const drawer = await ensureDrawer(header);
       if (drawer) {
         if (!phone) {
@@ -352,10 +396,13 @@
     // CLEANUP
     if (name) name = name.replace(/^~\s*/, '').trim();
 
-    log.debug(`=== Result: name="${name}", phone="${phone}" ===`);
+    // Fonte a partir da etiqueta da conversa
+    const source = extractLabel(opts.knownSources);
+
+    log.debug(`=== Result: name="${name}", phone="${phone}", source="${source}" ===`);
 
     if (phone || name) {
-      return { error: null, contact: { name: name || '', phone: phone || '', source: 'active-chat' } };
+      return { error: null, contact: { name: name || '', phone: phone || '', source: source || '' } };
     }
     return { error: 'EXTRACTION_FAILED', contact: null };
   }
@@ -719,6 +766,7 @@
   window.__MEMUDE_EXTRACTOR = {
     startNetworkInterceptor,
     extractActiveContact,
+    extractLabel,
     isChatOpen,
     isGroupChat,
     normalizePhone,

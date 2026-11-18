@@ -1,279 +1,166 @@
 /* ============================================================
-   MeMude - Background Service Worker
-   Handles Google Sheets API calls, auth and message routing
+   MeMude Connect · Service worker
+   Login, chamadas ao sistema (leads-api), cache das opções e fila de
+   segurança: cadastro que falha por falta de conexão fica guardado e é
+   reenviado sozinho a cada minuto. Nenhum lead se perde.
    ============================================================ */
 
 importScripts(
+  '/utils/config.js',
   '/utils/logger.js',
   '/utils/phone-utils.js',
-  '/utils/settings.js',
   '/utils/history.js',
   '/utils/auth.js',
-  '/utils/sheets-api.js'
+  '/utils/api.js'
 );
 
+const FILA = 'memude_fila_envio';
+const CACHE_OPCOES = 'memude_opcoes';
+const OPCOES_VALIDADE_MS = 30 * 60 * 1000;
+const ALARME_FILA = 'memude-fila';
+
+const local = {
+  get: (k) => new Promise((r) => chrome.storage.local.get(k, (d) => r(d[k]))),
+  set: (k, v) => new Promise((r) => chrome.storage.local.set({ [k]: v }, r)),
+};
+
 // ============================================================
-// Message Handler
+// Mensagens do painel (WhatsApp) e do popup
 // ============================================================
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  switch (request.action) {
-    case 'EXPORT_TO_SHEETS':
-    case 'EXPORT_TO_SHEETS_FROM_CONTENT':
-      handleExport(request.data)
-        .then(result => sendResponse(result))
-        .catch(err => sendResponse({ success: false, error: err.message }));
-      return true;
+const ROTAS = {
+  ENTRAR: (d) => MemudeAuth.entrar(d.email, d.senha).then(async (r) => { await local.set(CACHE_OPCOES, null); return r; }),
+  SAIR: () => MemudeAuth.sair().then(() => local.set(CACHE_OPCOES, null)),
+  SESSAO: () => MemudeAuth.sessao(),
+  OPCOES: (d) => opcoes(d && d.forcar),
+  RESUMO: () => MemudeApi.resumo(),
+  BUSCAR: (d) => MemudeApi.buscar(d.telefone),
+  CRIAR_LEAD: (d) => criarLead(d),
+  ATUALIZAR_LEAD: (d) => MemudeApi.atualizarLead(d),
+  CORRETORES: (d) => MemudeApi.corretores(d.empreendimento_id, d.data, d.hora),
+  AGENDAR_VISITA: (d) => MemudeApi.agendarVisita(d),
+  LEMBRETE: (d) => MemudeApi.lembrete(d),
+  FILA: () => local.get(FILA).then((f) => f || []),
+  ENVIAR_FILA: () => enviarFila(),
+  HISTORICO: (d) => History.list((d && d.limite) || 30),
+};
 
-    case 'TEST_SHEET_CONNECTION':
-      handleTestConnection(request.data)
-        .then(result => sendResponse(result))
-        .catch(err => sendResponse({ success: false, error: err.message }));
-      return true;
-
-    case 'GET_AUTH_TOKEN': // login (interactive=true) ou leitura silenciosa
-      AUTH.getToken(request.interactive || false)
-        .then(token => sendResponse({ success: true, token }))
-        .catch(err => sendResponse({ success: false, error: err.message }));
-      return true;
-
-    case 'CHECK_AUTH':
-      AUTH.validateLive()
-        .then(connected => sendResponse({ success: true, connected }))
-        .catch(() => sendResponse({ success: true, connected: false }));
-      return true;
-
-    case 'LOGOUT':
-      AUTH.logout()
-        .then(() => sendResponse({ success: true }))
-        .catch(err => sendResponse({ success: false, error: err.message }));
-      return true;
-
-    case 'GET_SETTINGS':
-      Settings.getSettings()
-        .then(s => sendResponse({ success: true, settings: s }))
-        .catch(err => sendResponse({ success: false, error: err.message }));
-      return true;
-
-    case 'SAVE_SETTINGS':
-      Settings.saveSettings(request.settings || {})
-        .then(s => sendResponse({ success: true, settings: s }))
-        .catch(err => sendResponse({ success: false, error: err.message }));
-      return true;
-
-    case 'RESET_SETTINGS':
-      Settings.resetToTeamDefaults()
-        .then(s => sendResponse({ success: true, settings: s }))
-        .catch(err => sendResponse({ success: false, error: err.message }));
-      return true;
-
-    case 'GET_HISTORY':
-      History.list(request.limit || 50)
-        .then(items => sendResponse({ success: true, items }))
-        .catch(err => sendResponse({ success: false, error: err.message }));
-      return true;
-
-    case 'CLEAR_HISTORY':
-      History.clear()
-        .then(() => sendResponse({ success: true }))
-        .catch(err => sendResponse({ success: false, error: err.message }));
-      return true;
-
-    case 'GET_DAILY_COUNT':
-      History.dailyCount()
-        .then(count => sendResponse({ success: true, count }))
-        .catch(err => sendResponse({ success: false, error: err.message }));
-      return true;
-
-    default:
-      return false;
-  }
+chrome.runtime.onMessage.addListener((pedido, _remetente, responder) => {
+  const rota = ROTAS[pedido && pedido.acao];
+  if (!rota) return false;
+  Promise.resolve()
+    .then(() => rota(pedido.dados || {}))
+    .then((dados) => responder({ ok: true, dados }))
+    .catch((e) => responder({ ok: false, erro: e.message, code: e.code || null, status: e.status || null }));
+  return true;
 });
 
+async function opcoes(forcar) {
+  const cache = await local.get(CACHE_OPCOES);
+  if (!forcar && cache && Date.now() - cache.em < OPCOES_VALIDADE_MS) return cache.dados;
+  const dados = await MemudeApi.opcoes();
+  await local.set(CACHE_OPCOES, { em: Date.now(), dados });
+  return dados;
+}
+
 // ============================================================
-// Export
+// Cadastro com fila de segurança
 // ============================================================
-
-/**
- * Recebe os contatos, busca config + token e grava na planilha.
- * O token é obtido aqui (não vem mais do popup). Em caso de 401,
- * o token é invalidado e devolvemos NEEDS_AUTH para o popup pedir
- * reconexão.
- */
-async function handleExport(data) {
-  const contacts = (data && data.contacts) || [];
-
-  if (contacts.length === 0) {
-    return { success: false, error: 'Nenhum contato para exportar' };
-  }
-
-  const settings = await Settings.getSettings();
-  if (!settings || !settings.spreadsheetId) {
-    return { success: false, error: 'Configure a planilha na extensão primeiro' };
-  }
-
-  let token;
+async function criarLead(dados) {
   try {
-    token = await AUTH.getToken(false);
-  } catch (err) {
-    return { success: false, error: 'Conecte sua conta Google primeiro', code: 'NEEDS_AUTH' };
-  }
-
-  let result = await writeContacts(contacts, settings, token);
-
-  if (!result.success && isAuthError(result.error)) {
-    await AUTH.invalidate();
-    return { success: false, error: 'Sessão do Google expirou. Conecte novamente.', code: 'NEEDS_AUTH' };
-  }
-
-  return result;
-}
-
-/**
- * Deduplica, grava na planilha e atualiza o histórico.
- */
-async function writeContacts(contacts, settings, token) {
-  // Aplica defaults da equipe nos campos opcionais
-  const enriched = contacts.map(c => ({
-    name: c.name || '',
-    phone: c.phone || '',
-    status: c.status || settings.defaultStatus || '',
-    source: c.source || settings.defaultSource || '',
-    notes: c.notes || '',
-    timestamp: c.timestamp || new Date().toLocaleString('pt-BR')
-  }));
-
-  // Aplica 9º dígito se a setting estiver ligada
-  if (settings.add9thDigit) {
-    for (const c of enriched) c.phone = PhoneUtils.add9thDigit(c.phone);
-  }
-
-  // Carrega chaves já existentes na planilha + no histórico local
-  const [remote, localKeys] = await Promise.all([
-    SheetsAPI.getExistingPhones(settings.spreadsheetId, settings.sheetName, settings.colPhone, token),
-    History.localPhoneKeys()
-  ]);
-  const seen = new Set([...remote, ...localKeys]);
-
-  const newContacts = enriched.filter(c => {
-    const key = PhoneUtils.phoneKey(c.phone);
-    return key && !seen.has(key);
-  });
-  const duplicated = enriched.length - newContacts.length;
-
-  if (newContacts.length === 0) {
-    // Não polui o histórico com entradas duplicadas — só retorna o sumário.
-    return {
-      success: true,
-      exported: 0,
-      duplicated,
-      errors: 0,
-      message: 'Todos os contatos já existem na planilha'
-    };
-  }
-
-  const cols = {
-    name: settings.colName,
-    phone: settings.colPhone,
-    status: settings.colStatus,
-    source: settings.colSource,
-    notes: settings.colNotes,
-    timestamp: settings.colTimestamp
-  };
-
-  const result = await SheetsAPI.appendContacts(
-    settings.spreadsheetId,
-    settings.sheetName,
-    cols,
-    newContacts,
-    token
-  );
-
-  if (result.success) {
-    await History.addBulk(newContacts.map(c => ({ ...c, exported: true })), settings.historyLimit);
-    result.duplicated = duplicated;
-  } else {
-    await History.addBulk(newContacts.map(c => ({ ...c, exported: false, error: result.error })));
-  }
-  return result;
-}
-
-function isAuthError(error) {
-  return /401|unauthenticated|invalid.?credentials|invalid.?token|access.?token/i.test(String(error || ''));
-}
-
-/**
- * Test connection to the configured spreadsheet
- */
-async function handleTestConnection(data) {
-  let token = (data && data.token) || null;
-  if (!token) {
-    token = await AUTH.getToken(false).catch(() => null);
-  }
-  if (!token) return { success: false, error: 'Conecte sua conta Google primeiro', code: 'NEEDS_AUTH' };
-  return SheetsAPI.testConnection(data.spreadsheetId, token);
-}
-
-// ============================================================
-// Helpers
-// ============================================================
-
-/**
- * Encontra a melhor aba do WhatsApp Web entre todas as janelas.
- * Prefere a aba ativa da janela focada → qualquer ativa → qualquer.
- */
-async function findWhatsAppTab() {
-  const all = await chrome.tabs.query({ url: 'https://web.whatsapp.com/*' });
-  if (!all.length) return null;
-  // Prefere uma aba ativa (qualquer janela), senão pega a primeira.
-  return all.find(t => t.active) || all[0];
-}
-
-// ============================================================
-// Atalhos de teclado (chrome.commands)
-// ============================================================
-chrome.commands.onCommand.addListener(async (command) => {
-  try {
-    const tab = await findWhatsAppTab();
-    if (!tab) {
-      // Sem WhatsApp aberto em lugar nenhum — abre uma aba
-      chrome.tabs.create({ url: 'https://web.whatsapp.com/' });
-      return;
+    const r = await MemudeApi.criarLead(dados);
+    await History.add({ name: dados.nome, phone: dados.telefone, source: dados.fonte, exported: true, lead_id: r.lead && r.lead.id, duplicado: !!r.duplicado });
+    return r;
+  } catch (e) {
+    if (e.code === 'OFFLINE' || e.code === 'SERVIDOR') {
+      const fila = (await local.get(FILA)) || [];
+      const chave = PhoneUtils.phoneKey(dados.telefone);
+      if (!fila.some((f) => PhoneUtils.phoneKey(f.dados.telefone) === chave)) {
+        fila.push({ dados, tentativas: 0, criado: Date.now(), erro: e.message });
+        await local.set(FILA, fila);
+      }
+      atualizarSelo();
+      return { na_fila: true, aviso: 'Sem conexão: o lead ficou guardado e será enviado sozinho.' };
     }
-    // Garante que a aba está focada para os atalhos funcionarem
+    throw e;
+  }
+}
+
+let enviandoFila = false;
+async function enviarFila() {
+  if (enviandoFila) return { enviados: 0, restantes: ((await local.get(FILA)) || []).length };
+  enviandoFila = true;
+  try {
+    const fila = (await local.get(FILA)) || [];
+    const restantes = [];
+    let enviados = 0;
+    for (const item of fila) {
+      try {
+        const r = await MemudeApi.criarLead(item.dados);
+        await History.add({ name: item.dados.nome, phone: item.dados.telefone, source: item.dados.fonte, exported: true, lead_id: r.lead && r.lead.id, duplicado: !!r.duplicado });
+        enviados += 1;
+      } catch (e) {
+        if (e.code === 'NEEDS_LOGIN') { restantes.push(item); continue; }
+        // Recusa definitiva (dados inválidos) sai da fila depois de 5 tentativas para não travar o resto.
+        item.tentativas += 1;
+        item.erro = e.message;
+        if (e.code === 'RECUSADO' && item.tentativas >= 5) {
+          await History.add({ name: item.dados.nome, phone: item.dados.telefone, exported: false, error: e.message });
+          continue;
+        }
+        restantes.push(item);
+      }
+    }
+    await local.set(FILA, restantes);
+    atualizarSelo();
+    return { enviados, restantes: restantes.length };
+  } finally {
+    enviandoFila = false;
+  }
+}
+
+async function atualizarSelo() {
+  const n = ((await local.get(FILA)) || []).length;
+  chrome.action.setBadgeText({ text: n ? String(n) : '' });
+  chrome.action.setBadgeBackgroundColor({ color: '#e92662' });
+}
+
+chrome.alarms.onAlarm.addListener((a) => { if (a.name === ALARME_FILA) enviarFila().catch(() => undefined); });
+
+function agendarFila() {
+  chrome.alarms.create(ALARME_FILA, { periodInMinutes: 1 });
+  atualizarSelo();
+}
+chrome.runtime.onInstalled.addListener(agendarFila);
+chrome.runtime.onStartup.addListener(agendarFila);
+
+// ============================================================
+// Atalhos de teclado
+// ============================================================
+async function abaDoWhatsApp() {
+  const abas = await chrome.tabs.query({ url: 'https://web.whatsapp.com/*' });
+  return abas.find((t) => t.active) || abas[0] || null;
+}
+
+chrome.commands.onCommand.addListener(async (comando) => {
+  try {
+    const aba = await abaDoWhatsApp();
+    if (!aba) { chrome.tabs.create({ url: 'https://web.whatsapp.com/' }); return; }
     try {
-      await chrome.tabs.update(tab.id, { active: true });
-      if (tab.windowId != null) await chrome.windows.update(tab.windowId, { focused: true });
-    } catch (e) { /* ignore */ }
-    const action = command === 'open-overlay' ? 'OVERLAY_OPEN' : 'RUN_QUICK_CAPTURE';
+      await chrome.tabs.update(aba.id, { active: true });
+      if (aba.windowId != null) await chrome.windows.update(aba.windowId, { focused: true });
+    } catch (e) { /* aba fechando */ }
+    const acao = comando === 'open-overlay' ? 'PAINEL_ABRIR' : 'CADASTRO_RAPIDO';
     try {
-      await chrome.tabs.sendMessage(tab.id, { action });
+      await chrome.tabs.sendMessage(aba.id, { acao });
     } catch (e) {
-      // Content script não carregou — injeta e tenta de novo
       await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        files: [
-          'utils/logger.js',
-          'utils/phone-utils.js',
-          'utils/phone-extractor.js',
-          'content/overlay.js',
-          'content/content.js'
-        ]
+        target: { tabId: aba.id },
+        files: ['utils/config.js', 'utils/logger.js', 'utils/phone-utils.js', 'utils/fontes.js', 'utils/phone-extractor.js', 'content/overlay.js', 'content/content.js'],
       });
-      await new Promise(r => setTimeout(r, 1500));
-      await chrome.tabs.sendMessage(tab.id, { action });
+      await new Promise((r) => setTimeout(r, 1500));
+      await chrome.tabs.sendMessage(aba.id, { acao });
     }
   } catch (err) {
-    Logger.error('command failed', command, err);
-  }
-});
-
-// ============================================================
-// Installation Handler
-// ============================================================
-
-chrome.runtime.onInstalled.addListener((details) => {
-  if (details.reason === 'install') {
-    Logger.warn('Extension installed — applying team defaults');
-    Settings.resetToTeamDefaults();
+    Logger.error('atalho falhou', comando, err);
   }
 });

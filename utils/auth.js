@@ -1,159 +1,83 @@
 /* ============================================================
-   MeMude - Auth Module (OAuth por usuário)
-   Usa chrome.identity.launchWebAuthFlow com um OAuth client do
-   tipo "Aplicativo da Web". Funciona com QUALQUER conta Google,
-   independente do login do Chrome.
-
-   O token de acesso (válido ~1h) é guardado em chrome.storage.local.
-   Não há refresh token no fluxo implícito: quando expira, o usuário
-   reconecta pelo popup.
+   MeMude Connect · Login
+   Entra com o mesmo e-mail e senha do MeMude Connect (Supabase Auth).
+   A sessão (tokens) fica só neste navegador, em chrome.storage.local;
+   a senha nunca é guardada.
    ============================================================ */
+(function (root) {
+  'use strict';
 
-const AUTH = {
-  // OAuth client tipo "Aplicativo da Web" (Google Cloud Console)
-  CLIENT_ID: '44849090581-qan2f7bkqdh6vj3l4617fvnlemh0a8cg.apps.googleusercontent.com',
-  SCOPES: ['https://www.googleapis.com/auth/spreadsheets'],
-  STORAGE_KEY: 'memude_auth',
-  // margem de segurança antes da expiração (ms)
-  EXPIRY_BUFFER_MS: 2 * 60 * 1000,
+  const CHAVE = 'memude_sessao';
+  const MARGEM_MS = 60_000; // renova o token um minuto antes de vencer
 
-  /**
-   * Retorna um access token válido.
-   * @param {boolean} interactive - se true, abre a tela de login quando necessário
-   * @returns {Promise<string>}
-   */
-  async getToken(interactive = false) {
-    const stored = await this._getStored();
-    if (stored && stored.accessToken && stored.expiresAt - this.EXPIRY_BUFFER_MS > Date.now()) {
-      return stored.accessToken;
-    }
-    if (!interactive) {
-      throw new Error('NOT_AUTHENTICATED');
-    }
-    return this._interactiveLogin();
-  },
+  const cfg = () => root.MEMUDE_CONFIG;
+  const ler = () => new Promise((r) => chrome.storage.local.get(CHAVE, (d) => r(d[CHAVE] || null)));
+  const gravar = (s) => new Promise((r) => chrome.storage.local.set({ [CHAVE]: s }, r));
+  const limpar = () => new Promise((r) => chrome.storage.local.remove(CHAVE, r));
 
-  /**
-   * Existe um token válido em cache (sem abrir login)?
-   * @returns {Promise<boolean>}
-   */
-  async hasValidToken() {
-    const stored = await this._getStored();
-    return !!(stored && stored.accessToken && stored.expiresAt - this.EXPIRY_BUFFER_MS > Date.now());
-  },
-
-  /**
-   * Confirma que o token ainda é válido junto ao Google (não foi
-   * revogado nem expirou). Faz uma chamada leve a tokeninfo.
-   * Em caso de falha, invalida o cache e devolve false.
-   * @returns {Promise<boolean>}
-   */
-  async validateLive() {
-    const stored = await this._getStored();
-    if (!stored || !stored.accessToken) return false;
-    try {
-      const resp = await fetch('https://oauth2.googleapis.com/tokeninfo?access_token=' + encodeURIComponent(stored.accessToken));
-      if (!resp.ok) {
-        await this.invalidate();
-        return false;
-      }
-      const info = await resp.json();
-      // Atualiza expiresAt com o valor autoritativo do Google
-      if (info && info.expires_in) {
-        const expiresAt = Date.now() + parseInt(info.expires_in, 10) * 1000;
-        await this._setStored({ accessToken: stored.accessToken, expiresAt });
-      }
-      return true;
-    } catch (e) {
-      // Sem rede: assume válido localmente, não invalida
-      return !!(stored.expiresAt - this.EXPIRY_BUFFER_MS > Date.now());
-    }
-  },
-
-  /**
-   * Abre a janela de login do Google e guarda o token.
-   * @returns {Promise<string>} access token
-   */
-  async _interactiveLogin() {
-    const redirectUri = chrome.identity.getRedirectURL(); // https://<id>.chromiumapp.org/
-
-    const authUrl =
-      'https://accounts.google.com/o/oauth2/v2/auth' +
-      '?client_id=' + encodeURIComponent(this.CLIENT_ID) +
-      '&response_type=token' +
-      '&redirect_uri=' + encodeURIComponent(redirectUri) +
-      '&scope=' + encodeURIComponent(this.SCOPES.join(' ')) +
-      // select_account: o usuário escolhe a conta a cada login (mas
-      // o consentimento já dado é lembrado — sem fricção repetida).
-      '&prompt=' + encodeURIComponent('select_account');
-
-    const redirectResponse = await new Promise((resolve, reject) => {
-      chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, (resp) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-        } else if (!resp) {
-          reject(new Error('Login cancelado'));
-        } else {
-          resolve(resp);
-        }
-      });
-    });
-
-    const tokenMatch = redirectResponse.match(/[#&]access_token=([^&]+)/);
-    if (!tokenMatch) {
-      const errMatch = redirectResponse.match(/[#&]error=([^&]+)/);
-      throw new Error('Falha no login: ' + (errMatch ? decodeURIComponent(errMatch[1]) : 'token não retornado'));
-    }
-
-    const accessToken = decodeURIComponent(tokenMatch[1]);
-    const expiresMatch = redirectResponse.match(/[#&]expires_in=([^&]+)/);
-    const expiresInSec = expiresMatch ? parseInt(expiresMatch[1], 10) : 3600;
-    const expiresAt = Date.now() + expiresInSec * 1000;
-
-    await this._setStored({ accessToken, expiresAt });
-    return accessToken;
-  },
-
-  /**
-   * Invalida o token em cache (ex.: após um 401). Não revoga no Google.
-   */
-  async invalidate() {
-    await this._removeStored();
-  },
-
-  /**
-   * Logout completo: revoga o token no Google e limpa o cache.
-   */
-  async logout() {
-    const stored = await this._getStored();
-    if (stored && stored.accessToken) {
-      try {
-        await fetch('https://oauth2.googleapis.com/revoke?token=' + encodeURIComponent(stored.accessToken), {
-          method: 'POST'
-        });
-      } catch (e) { /* ignora erro de rede ao revogar */ }
-    }
-    await this._removeStored();
-  },
-
-  // ---- storage helpers ----
-  _getStored() {
-    return new Promise((resolve) => {
-      chrome.storage.local.get(this.STORAGE_KEY, (data) => resolve(data[this.STORAGE_KEY] || null));
-    });
-  },
-  _setStored(value) {
-    return new Promise((resolve) => {
-      chrome.storage.local.set({ [this.STORAGE_KEY]: value }, resolve);
-    });
-  },
-  _removeStored() {
-    return new Promise((resolve) => {
-      chrome.storage.local.remove(this.STORAGE_KEY, resolve);
-    });
+  function sessaoDe(resposta) {
+    return {
+      access_token: resposta.access_token,
+      refresh_token: resposta.refresh_token,
+      expira_em: Date.now() + (Number(resposta.expires_in) || 3600) * 1000,
+      email: resposta.user && resposta.user.email,
+      user_id: resposta.user && resposta.user.id,
+    };
   }
-};
 
-if (typeof globalThis !== 'undefined') {
-  globalThis.AUTH = AUTH;
-}
+  async function chamarAuth(caminho, corpo, token) {
+    const headers = { apikey: cfg().ANON_KEY, 'Content-Type': 'application/json' };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const r = await fetch(`${cfg().SUPABASE_URL}/auth/v1/${caminho}`, { method: 'POST', headers, body: JSON.stringify(corpo || {}) });
+    const j = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, j };
+  }
+
+  /** Login com e-mail e senha do Connect. */
+  async function entrar(email, senha) {
+    const { ok, j } = await chamarAuth('token?grant_type=password', { email: String(email || '').trim(), password: senha });
+    if (!ok) {
+      const msg = /invalid/i.test(j.error_description || j.msg || '') ? 'E-mail ou senha incorretos' : (j.error_description || j.msg || 'Não foi possível entrar');
+      throw new Error(msg);
+    }
+    const s = sessaoDe(j);
+    await gravar(s);
+    return { email: s.email };
+  }
+
+  let renovando = null;
+  async function renovar(s) {
+    if (!renovando) {
+      renovando = (async () => {
+        const { ok, j } = await chamarAuth('token?grant_type=refresh_token', { refresh_token: s.refresh_token });
+        if (!ok) { await limpar(); return null; }
+        const nova = sessaoDe(j);
+        await gravar(nova);
+        return nova;
+      })().finally(() => { renovando = null; });
+    }
+    return renovando;
+  }
+
+  /** Token válido (renova sozinho). Lança NEEDS_LOGIN quando não há sessão. */
+  async function token(forcarRenovacao = false) {
+    let s = await ler();
+    if (!s) throw Object.assign(new Error('Entre com sua conta do MeMude Connect'), { code: 'NEEDS_LOGIN' });
+    if (forcarRenovacao || s.expira_em - Date.now() < MARGEM_MS) s = await renovar(s);
+    if (!s) throw Object.assign(new Error('Sua sessão expirou. Entre novamente.'), { code: 'NEEDS_LOGIN' });
+    return s.access_token;
+  }
+
+  async function sair() {
+    const s = await ler();
+    if (s) await chamarAuth('logout', {}, s.access_token).catch(() => undefined);
+    await limpar();
+  }
+
+  async function sessao() {
+    const s = await ler();
+    return s ? { email: s.email, user_id: s.user_id } : null;
+  }
+
+  root.MemudeAuth = { entrar, token, sair, sessao, CHAVE };
+})(globalThis);
