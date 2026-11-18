@@ -219,6 +219,7 @@
   // ============================================================
   function findDrawer() {
     const candidates = [
+      '[data-testid="chat-info-drawer"]',          // WhatsApp atual (2026)
       '[data-testid="contact-info-drawer"]',
       'section[data-testid="contact-info"]',
       '[data-animate-drawer-open="true"]',
@@ -261,21 +262,30 @@
   function alvosDoCabecalho(header) {
     const lista = [];
     const add = (el) => { if (el && !lista.includes(el) && seguroParaClicar(el, header)) lista.push(el); };
+    // WhatsApp atual: um botão transparente por cima da foto + nome ("Informações de contato")
+    add(header.querySelector('[data-testid="conversation-info-header-button"]'));
     add(header.querySelector('[data-testid="conversation-header-contact-info"]'));
-    add(header.querySelector('[data-testid="conversation-info-header"]'));
-    add(header.querySelector('[data-testid="conversation-info-header-chat-title"]'));
     header.querySelectorAll('[aria-label]').forEach((el) => {
-      if (/dados do (contato|perfil)|informa[çc][õo]es do contato|contact info|profile (details|info)|datos del contacto/i.test(el.getAttribute('aria-label'))) add(el);
+      if (/(dados|informa[çc][õo]es) d[eo]s? (contato|perfil|empresa)|contact info|profile (details|info)|business info|datos del contacto/i.test(el.getAttribute('aria-label'))) add(el);
     });
-    // Nome do contato no topo (o mesmo lugar onde a pessoa clica com o mouse)
-    const nome = [...header.querySelectorAll('span[title], span[dir="auto"]')]
-      .find((s) => { const t = (s.getAttribute('title') || s.textContent || '').trim(); return t.length >= 2 && !isWhatsAppUIText(t); });
+    // O que está POR CIMA do nome e da foto na tela (é onde o clique do mouse cai)
+    const noPonto = (el) => {
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height) return null;
+      const topo = document.elementFromPoint(r.left + Math.min(r.width / 2, 30), r.top + r.height / 2);
+      return topo && header.contains(topo) ? (topo.closest('button, [role="button"]') || topo) : null;
+    };
+    const nome = header.querySelector('[data-testid="conversation-info-header-chat-title"]')
+      || [...header.querySelectorAll('span[title], span[dir="auto"]')]
+        .find((s) => { const t = (s.getAttribute('title') || s.textContent || '').trim(); return t.length >= 2 && !isWhatsAppUIText(t); });
+    const foto = header.querySelector('[data-testid="conversation-header-avatar"]') || header.querySelector('img');
+    add(noPonto(nome));
+    add(noPonto(foto));
+    // Últimos recursos: o próprio nome/foto e o primeiro bloco do header
     add(nome);
-    // Foto do contato
-    const foto = header.querySelector('img');
     add(foto);
-    if (foto) add(foto.parentElement);
-    // Primeiro bloco do header (foto + nome)
+    add(header.querySelector('[data-testid="conversation-info-header"]'));
     add(header.firstElementChild);
     return lista;
   }
@@ -291,7 +301,7 @@
     el.dispatchEvent(new MouseEvent('click', base));
   }
 
-  const TEXTO_GAVETA = /dados do contato|dados do perfil|informa[çc][õo]es do contato|contact info|profile details|datos del contacto|dados da empresa|business info/i;
+  const TEXTO_GAVETA = /dados do contato|dados do perfil|informa[çc][õo]es d[eo] contato|contact info|profile details|datos del contacto|dados da empresa|business info/i;
 
   /** Painel lateral NOVO (que não existia antes do clique), só dentro do WhatsApp. */
   function gavetaNova(antes) {
@@ -301,6 +311,9 @@
     return candidates(candidatos, antes);
   }
   function candidates(lista, antes) {
+    // WhatsApp atual: o painel tem nome próprio
+    const certo = lista.find((e) => e.getAttribute && e.getAttribute('data-testid') === 'chat-info-drawer');
+    if (certo) return certo;
     // Preferência: elemento novo cujo texto parece "Dados do contato"
     const novos = lista.filter((e) => !antes.has(e));
     return novos.find((e) => TEXTO_GAVETA.test((e.textContent || '').slice(0, 400)))
@@ -488,7 +501,7 @@
     // Só aproveita um painel já aberto se ele for mesmo "Dados do contato"
     // (o WhatsApp tem outras barras laterais que casariam com seletores genéricos).
     let drawer = findDrawer();
-    if (drawer && (TEXTO_GAVETA.test((drawer.textContent || '').slice(0, 400)) || extractPhoneFromDrawerContent(drawer))) {
+    if (drawer && (drawer.getAttribute('data-testid') === 'chat-info-drawer' || TEXTO_GAVETA.test((drawer.textContent || '').slice(0, 400)) || extractPhoneFromDrawerContent(drawer))) {
       await waitMs(300);
       return drawer;
     }
