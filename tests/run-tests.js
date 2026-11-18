@@ -192,6 +192,31 @@ async function testAuth() {
   try { await A.token(true); } catch (e) { erro = e.code; }
   eq(erro, 'NEEDS_LOGIN', 'refresh recusado → NEEDS_LOGIN');
   eq(await A.sessao(), null, 'sessão apagada depois de expirar');
+
+  // Login pelo Connect aberto: token do site → sessão própria da extensão
+  const payload = Buffer.from(JSON.stringify({ sub: 'u7' })).toString('base64').replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+  const tokenSite = `cab.${payload}.ass`;
+  eq(A.usuarioDoToken(tokenSite), 'u7', 'lê o usuário do token do site');
+  eq(A.usuarioDoToken('lixo'), null, 'token inválido → null');
+  const pedidos = [];
+  globalThis.fetch = (url, opts) => {
+    pedidos.push({ url, auth: opts.headers.Authorization, corpo: JSON.parse(opts.body || '{}') });
+    if (url.includes('recurso=sessao')) {
+      return opts.headers.Authorization === `Bearer ${tokenSite}` ? respostaFetch(200, { token_hash: 'H1', email: 'ramon@memude.com.br' }) : respostaFetch(401, { erro: 'Sessão inválida' });
+    }
+    if (url.endsWith('/auth/v1/verify')) {
+      return JSON.parse(opts.body).token_hash === 'H1'
+        ? respostaFetch(200, { access_token: 'E1', refresh_token: 'ER1', expires_in: 3600, user: { email: 'ramon@memude.com.br', id: 'u7' } })
+        : respostaFetch(403, {});
+    }
+    return respostaFetch(404, {});
+  };
+  eq(await A.entrarComConnect(tokenSite), { email: 'ramon@memude.com.br', user_id: 'u7' }, 'entra com o Connect sem senha');
+  eq(pedidos[1].corpo, { type: 'magiclink', token_hash: 'H1' }, 'troca o código por uma sessão própria');
+  eq(await A.token(), 'E1', 'extensão usa o token próprio, não o do site');
+  erro = null;
+  try { await A.entrarComConnect('cab.x.y'); } catch (e) { erro = e.message; }
+  eq(erro, 'Sessão inválida', 'token do site recusado → erro claro');
 }
 
 // ============================================================

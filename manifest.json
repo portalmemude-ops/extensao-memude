@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MeMude Connect · WhatsApp",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Cadastre leads, agende visitas e acompanhe a ficha do cliente no MeMude Connect direto do WhatsApp Web",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAs0ECnhP6Td7uBiWUMz9VrsC3WM4TpaLO9iZQZnoGMIlOxlhe4VS80padebKvRtrK4XqbArAFRwwPOo4L/j9E6uF1IZDJI8znJaIg1OPTl5bKTUs0tciwBgdfsH2z3StymSI82dd74esA4SRx96DUvxIdXTuY8Gso6vWyT5ubd0/isCUcKLE46AGys6RszwRzehNmF5f+zcZOCFdf4eP3g5zSMmvI6kaMQZaRAFA31VU/MGyQnbi7YySxWPBmp0+2unEQKuv+sdmFvM55jEaBJ2G7UEMSCFubm4Aw6MCLlzRlR4z7Zg7mgUKOiVLNRNnbnKxouSCzqNKLS/aXDzEcxQIDAQAB",
   "permissions": [
@@ -13,7 +13,9 @@
   ],
   "host_permissions": [
     "https://web.whatsapp.com/*",
-    "https://oxybasvtphosdmlmrfnb.supabase.co/*"
+    "https://oxybasvtphosdmlmrfnb.supabase.co/*",
+    "https://core.memudecore.com.br/*",
+    "https://memude-connect.vercel.app/*"
   ],
   "background": {
     "service_worker": "background/service-worker.js"
@@ -34,6 +36,16 @@
       ],
       "css": [
         "content/overlay.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://core.memudecore.com.br/*",
+        "https://memude-connect.vercel.app/*"
+      ],
+      "js": [
+        "content/connect-sso.js"
       ],
       "run_at": "document_idle"
     }

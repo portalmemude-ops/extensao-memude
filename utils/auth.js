@@ -45,6 +45,35 @@
     return { email: s.email };
   }
 
+  /** Id do usuário dentro de um access_token (sem validar: a validação é do servidor). */
+  function usuarioDoToken(jwt) {
+    try {
+      const parte = String(jwt || '').split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      return JSON.parse(atob(parte + '==='.slice((parte.length + 3) % 4))).sub || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * Login sem senha a partir do Connect já aberto no navegador: o token do site
+   * pede ao servidor uma sessão própria da extensão (o site continua logado).
+   */
+  async function entrarComConnect(tokenDoSite) {
+    const r = await fetch(`${cfg().API_URL}?recurso=sessao`, {
+      method: 'POST',
+      headers: { apikey: cfg().ANON_KEY, Authorization: `Bearer ${tokenDoSite}`, 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.token_hash) throw new Error(j.erro || 'Não foi possível entrar com o Connect');
+    const v = await chamarAuth('verify', { type: 'magiclink', token_hash: j.token_hash });
+    if (!v.ok || !v.j.access_token) throw new Error('Não foi possível entrar com o Connect');
+    const s = sessaoDe(v.j);
+    await gravar(s);
+    return { email: s.email, user_id: s.user_id };
+  }
+
   let renovando = null;
   async function renovar(s) {
     if (!renovando) {
@@ -79,5 +108,5 @@
     return s ? { email: s.email, user_id: s.user_id } : null;
   }
 
-  root.MemudeAuth = { entrar, token, sair, sessao, CHAVE };
+  root.MemudeAuth = { entrar, entrarComConnect, usuarioDoToken, token, sair, sessao, CHAVE };
 })(globalThis);

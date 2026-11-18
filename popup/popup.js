@@ -1,4 +1,4 @@
-/* MeMude Connect · Popup: login, números do dia e atalhos. */
+/* MeMude Connect · Popup: login (pelo Connect ou e-mail/senha), números do dia e atalhos. */
 (function () {
   'use strict';
 
@@ -15,11 +15,17 @@
     });
   }
 
+  function tela(qual) {
+    $('verificando').hidden = qual !== 'verificando';
+    $('sem-login').hidden = qual !== 'sem-login';
+    $('com-login').hidden = qual !== 'com-login';
+  }
+
   async function mostrar() {
+    // SESSAO já tenta entrar sozinho se o Connect estiver aberto e logado.
     const sessao = await enviar('SESSAO').catch(() => null);
-    $('sem-login').hidden = !!sessao;
-    $('com-login').hidden = !sessao;
-    if (!sessao) { $('email').focus(); return; }
+    if (!sessao) { tela('sem-login'); return; }
+    tela('com-login');
     $('usuario').textContent = sessao.email;
     try {
       const [r, fila] = await Promise.all([enviar('RESUMO'), enviar('FILA')]);
@@ -32,6 +38,21 @@
       if (e.code === 'NEEDS_LOGIN') return mostrar();
     }
   }
+
+  $('btn-entrar-connect').addEventListener('click', async () => {
+    const btn = $('btn-entrar-connect');
+    btn.disabled = true; btn.textContent = 'Entrando…'; $('aviso-connect').hidden = true;
+    try {
+      const r = await enviar('ENTRAR_CONNECT');
+      if (r.entrou) { await mostrar(); return; }
+      $('aviso-connect').textContent = 'Abri o Connect em outra aba. Faça o login lá: a extensão entra sozinha.';
+      $('aviso-connect').hidden = false;
+    } catch (er) {
+      $('aviso-connect').textContent = er.message; $('aviso-connect').hidden = false;
+    } finally {
+      btn.disabled = false; btn.textContent = 'Entrar com o Connect';
+    }
+  });
 
   $('form-login').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -51,17 +72,12 @@
   $('btn-sair').addEventListener('click', async () => { await enviar('SAIR'); mostrar(); });
   $('btn-fila').addEventListener('click', async () => { await enviar('ENVIAR_FILA').catch(() => undefined); mostrar(); });
   $('btn-connect').addEventListener('click', () => chrome.tabs.create({ url: `${APP_URL}/hoje` }));
-  $('btn-whatsapp').addEventListener('click', async () => {
-    const [aba] = await chrome.tabs.query({ url: 'https://web.whatsapp.com/*' });
-    if (aba) { chrome.tabs.update(aba.id, { active: true }); chrome.windows.update(aba.windowId, { focused: true }); }
-    else chrome.tabs.create({ url: 'https://web.whatsapp.com/' });
-    window.close();
-  });
 
   if (window.Logger) {
     $('diag').checked = window.Logger.isDebug();
     $('diag').addEventListener('change', (e) => window.Logger.setDebug(e.target.checked));
   }
 
+  tela('verificando');
   mostrar();
 })();

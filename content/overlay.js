@@ -9,7 +9,10 @@
 (function () {
   'use strict';
 
-  if (window.__MEMUDE_PAINEL) return;
+  // Só pula se já houver um painel desta extensão funcionando. Um painel de uma versão
+  // anterior (extensão atualizada sem F5) fica sem conexão e é substituído.
+  const vivo = () => { try { return !!(chrome.runtime && chrome.runtime.id); } catch (e) { return false; } };
+  if (window.__MEMUDE_PAINEL && window.__MEMUDE_PAINEL.vivo && window.__MEMUDE_PAINEL.vivo()) return;
 
   const CFG = window.MEMUDE_CONFIG;
   const PU = window.PhoneUtils;
@@ -36,7 +39,7 @@
   // Utilidades
   // ============================================================
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const $ = (sel) => document.querySelector(`#mmc-raiz ${sel}`);
+  const $ = (sel) => document.querySelector(`#mmc-app ${sel}`);
   const iniciais = (n) => String(n || '?').trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
   const dataBR = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : '—');
   const diaSemana = (iso) => new Intl.DateTimeFormat('pt-BR', { weekday: 'long', timeZone: 'UTC' }).format(new Date(`${iso}T12:00:00Z`));
@@ -94,14 +97,22 @@
   // ============================================================
   // Montagem
   // ============================================================
+  /** Remove botões/painéis de versões anteriores que ficaram na página. */
+  function limparVersoesAntigas() {
+    ['memude-overlay', 'mmc-raiz', 'mmc-app'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.remove();
+    });
+  }
+
   function montar() {
-    if (document.getElementById('mmc-raiz')) return;
+    limparVersoesAntigas();
     const raiz = document.createElement('div');
-    raiz.id = 'mmc-raiz';
+    raiz.id = 'mmc-app';
     raiz.innerHTML = `
       <button type="button" class="mmc-fab" id="mmc-fab" title="MeMude Connect (Alt+Shift+M)" aria-label="Abrir painel MeMude Connect">
         <img src="${chrome.runtime.getURL('icons/icon128.png')}" alt="" draggable="false">
-        <span class="mmc-fab-ponto" id="mmc-fab-ponto" hidden></span>
+        <span class="mmc-fab-ponto" id="mmc-app-ponto" hidden></span>
       </button>
       <section class="mmc-painel" id="mmc-painel" hidden aria-label="MeMude Connect">
         <header class="mmc-topo">
@@ -114,7 +125,7 @@
         <div class="mmc-corpo" id="mmc-corpo"></div>
         <footer class="mmc-rodape" id="mmc-rodape"></footer>
       </section>
-      <datalist id="mmc-lista-emp"></datalist>`;
+      <datalist id="mmc-app-emps"></datalist>`;
     document.body.appendChild(raiz);
     raiz.addEventListener('click', aoClicar);
     raiz.addEventListener('change', aoMudar);
@@ -124,17 +135,27 @@
   }
 
   async function iniciar() {
-    try { est.sessao = await enviar('SESSAO'); } catch (e) { est.sessao = null; }
-    if (est.sessao) await carregarOpcoes();
-    render();
+    await recarregarSessao();
     setInterval(vigiarConversa, 1200);
     setInterval(atualizarRodape, 60_000);
+    // Sem login: tenta de novo de tempos em tempos (entra sozinho quando o Connect for aberto).
+    setInterval(() => { if (!est.sessao) recarregarSessao(); }, 15_000);
+  }
+
+  /** Lê a sessão (a extensão entra sozinha se o Connect estiver aberto e logado). */
+  async function recarregarSessao() {
+    const antes = est.sessao;
+    try { est.sessao = await enviar('SESSAO'); } catch (e) { est.sessao = null; }
+    if (est.sessao && !est.opcoes) await carregarOpcoes();
+    if (est.sessao && !antes) { est.ultimoCabecalho = null; est.erro = null; }
+    render();
+    if (est.aberto) atualizarRodape();
   }
 
   async function carregarOpcoes(forcar) {
     try {
       est.opcoes = await enviar('OPCOES', { forcar: !!forcar });
-      const lista = document.getElementById('mmc-lista-emp');
+      const lista = document.getElementById('mmc-app-emps');
       if (lista) lista.innerHTML = est.opcoes.empreendimentos.map((e) => `<option value="${esc(e.nome)}">${esc(e.bairro || '')}</option>`).join('');
     } catch (e) {
       est.erro = e.message;
@@ -187,7 +208,7 @@
   }
 
   function atualizarPonto() {
-    const p = document.getElementById('mmc-fab-ponto');
+    const p = document.getElementById('mmc-app-ponto');
     if (!p) return;
     if (!est.sessao || !est.ficha) { p.hidden = true; return; }
     p.hidden = false;
@@ -215,13 +236,19 @@
 
   function telaLogin() {
     return `
-      <form class="mmc-form" data-form="login">
-        <h2 class="mmc-titulo">Entre com sua conta do Connect</h2>
-        <p class="mmc-sub">Mesmo e-mail e senha do core.memudecore.com.br. Os leads entram direto no sistema.</p>
-        <label>E-mail<input type="email" name="email" required autocomplete="username"></label>
-        <label>Senha<input type="password" name="senha" required autocomplete="current-password"></label>
-        <button type="submit" class="mmc-btn mmc-btn-primario">Entrar</button>
-      </form>`;
+      <div class="mmc-form">
+        <h2 class="mmc-titulo">Conecte a extensão ao Connect</h2>
+        <p class="mmc-sub">Se você já está logado no Connect neste navegador, é só clicar abaixo. Sem senha.</p>
+        <button type="button" class="mmc-btn mmc-btn-primario" data-acao="entrar-connect">Entrar com o Connect</button>
+      </div>
+      <details class="mmc-outra-forma">
+        <summary>Entrar com e-mail e senha</summary>
+        <form class="mmc-form" data-form="login">
+          <label>E-mail<input type="email" name="email" required autocomplete="username"></label>
+          <label>Senha<input type="password" name="senha" required autocomplete="current-password"></label>
+          <button type="submit" class="mmc-btn">Entrar</button>
+        </form>
+      </details>`;
   }
 
   function cartaoContato() {
@@ -272,7 +299,7 @@
           <label>Fonte<select name="fonte">${opcoesSelect(o.fontes, c.fonte, 'Escolha')}</select></label>
           <label>Status<select name="status">${opcoesSelect(o.status, 'NOVO')}</select></label>
         </div>
-        <label>Empreendimento de interesse<input name="empreendimento" list="mmc-lista-emp" placeholder="Digite para buscar" autocomplete="off"></label>
+        <label>Empreendimento de interesse<input name="empreendimento" list="mmc-app-emps" placeholder="Digite para buscar" autocomplete="off"></label>
         <label>Observação<textarea name="observacao" rows="2" maxlength="1000" placeholder="O que o cliente procura, renda, região…"></textarea></label>
         <button type="submit" class="mmc-btn mmc-btn-primario">Cadastrar no Connect</button>
       </form>`;
@@ -328,7 +355,7 @@
       <button type="button" class="mmc-voltar" data-acao="ir" data-tela="contato">← ${esc(l.nome)}</button>
       <form class="mmc-form" data-form="visita">
         <h2 class="mmc-titulo">Agendar visita</h2>
-        <label>Empreendimento<input name="empreendimento" list="mmc-lista-emp" value="${esc(emp?.nome || '')}" required autocomplete="off"></label>
+        <label>Empreendimento<input name="empreendimento" list="mmc-app-emps" value="${esc(emp?.nome || '')}" required autocomplete="off"></label>
         <div class="mmc-duas">
           <label>Data<input type="date" name="data" min="${hojeISO()}" required></label>
           <label>Horário<input type="time" name="hora" step="900" required></label>
@@ -466,6 +493,16 @@
       identificar(false); atualizarRodape(); return;
     }
     if (acao === 'identificar-completo') return identificar(true);
+    if (acao === 'entrar-connect') {
+      alvo.disabled = true; alvo.textContent = 'Entrando…';
+      try {
+        const r = await enviar('ENTRAR_CONNECT');
+        if (r.entrou) { await recarregarSessao(); toast('Conectado ao MeMude Connect', 'sucesso'); }
+        else toast('Abri o Connect em outra aba. Faça o login lá e volte: a extensão entra sozinha.', 'info');
+      } catch (er) { toast(er.message, 'erro'); }
+      if (document.body.contains(alvo)) { alvo.disabled = false; alvo.textContent = 'Entrar com o Connect'; }
+      return;
+    }
     if (acao === 'inserir') {
       if (inserirNaConversa(est.mensagem)) toast('Mensagem colocada na conversa. Revise e envie.', 'sucesso');
       else toast('Não achei o campo de mensagem. Use Copiar.', 'erro');
@@ -595,7 +632,7 @@
     }
   }
 
-  window.__MEMUDE_PAINEL = { abrir, fechar, cadastroRapido, inserirNaConversa };
+  window.__MEMUDE_PAINEL = { abrir, fechar, cadastroRapido, inserirNaConversa, recarregarSessao, vivo };
 
   function aguardarWhatsApp() {
     const t = setInterval(() => {

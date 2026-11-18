@@ -50,3 +50,9 @@ kbd { font: inherit; font-size: 11px; padding: 1px 5px; border: 1px solid var(--
 .ponto.verde { background: #16a34a; }
 .ponto.rosa { background: var(--rosa); }
 .diag { flex-direction: row; align-items: center; gap: 6px; font-weight: 400; margin-top: 6px; }
+
+/* "hidden" precisa vencer o display:flex das seções (senão login e conta aparecem juntos) */
+[hidden] { display: none !important; }
+.centro { text-align: center; padding: 18px 0; }
+.aviso { margin: 0; font-size: 12.5px; color: var(--roxo-escuro); background: #f1effa; padding: 7px 9px; border-radius: 8px; }
+.form-login { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
