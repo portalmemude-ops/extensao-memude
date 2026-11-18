@@ -1,83 +1,151 @@
 /* ============================================================
    MeMude Connect · Visual do painel no WhatsApp Web
-   Mesma identidade do sistema: roxo #422f91, rosa #e92662, Inter.
+   Mesmo padrão do Connect: cartões brancos com borda fina, roxo
+   (#422f91) nas ações principais, rosa (#e92662) como destaque,
+   cinzas do sistema e cantos de 12px. Fonte Inter.
    Tudo prefixado com #mmc-app para não interferir no WhatsApp.
    ============================================================ */
 #mmc-app {
   --mmc-roxo: #422f91;
-  --mmc-roxo-escuro: #2b1d6e;
+  --mmc-roxo-claro: #5a45b8;
+  --mmc-roxo-escuro: #2f2070;
+  --mmc-roxo-suave: #efedf8;
   --mmc-rosa: #e92662;
-  --mmc-texto: #1f1b2e;
-  --mmc-suave: #6b6880;
-  --mmc-borda: #e6e3f0;
+  --mmc-rosa-escuro: #c4154e;
+  --mmc-rosa-suave: #fdeef3;
+  --mmc-texto: #24222f;
+  --mmc-suave: #71707e;
+  --mmc-borda: #e4e4e9;
   --mmc-fundo: #ffffff;
-  --mmc-fundo-2: #f7f6fb;
+  --mmc-fundo-2: #f5f5f7;
+  --mmc-verde: #15803d;
+  --mmc-verde-suave: #ecfdf3;
+  --mmc-erro: #b91c1c;
+  --mmc-erro-suave: #fef2f2;
   font-family: Inter, -apple-system, 'Segoe UI', Roboto, sans-serif;
   color: var(--mmc-texto);
+  font-size: 13px;
+  line-height: 1.4;
 }
-
 #mmc-app *, #mmc-app *::before, #mmc-app *::after { box-sizing: border-box; }
+#mmc-app [hidden] { display: none !important; }
+#mmc-app p { margin: 0; }
 
 /* ---------- Botão flutuante ---------- */
 #mmc-app .mmc-fab {
-  position: fixed; bottom: 96px; right: 22px; width: 54px; height: 54px; border-radius: 50%;
-  background: #fff; border: 2.5px solid var(--mmc-rosa); cursor: pointer; padding: 0;
+  position: fixed; bottom: 96px; right: 22px; width: 52px; height: 52px; border-radius: 50%;
+  background: #fff; border: 2px solid var(--mmc-rosa); cursor: pointer; padding: 0;
   display: flex; align-items: center; justify-content: center; z-index: 999999;
-  box-shadow: 0 6px 20px rgba(66, 47, 145, 0.35); transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 6px 18px rgba(47, 32, 112, 0.30); transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
-#mmc-app .mmc-fab:hover { transform: scale(1.06); box-shadow: 0 8px 26px rgba(66, 47, 145, 0.45); }
-#mmc-app .mmc-fab img { width: 34px; height: 34px; border-radius: 50%; pointer-events: none; }
-#mmc-app .mmc-fab-ponto { position: absolute; top: 1px; right: 1px; width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; }
+#mmc-app .mmc-fab:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(47, 32, 112, 0.38); }
+#mmc-app .mmc-fab img { width: 32px; height: 32px; border-radius: 50%; pointer-events: none; }
+#mmc-app .mmc-fab-ponto { position: absolute; top: 0; right: 0; width: 13px; height: 13px; border-radius: 50%; border: 2px solid #fff; }
 #mmc-app .mmc-ponto-lead { background: #16a34a; }
 #mmc-app .mmc-ponto-novo { background: var(--mmc-rosa); }
+#mmc-app .mmc-fab-contagem {
+  position: absolute; bottom: -3px; left: -5px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px;
+  display: grid; place-items: center; background: var(--mmc-roxo); color: #fff; font-size: 11px; font-weight: 700;
+  border: 2px solid #fff;
+}
 
 /* ---------- Painel ---------- */
 #mmc-app .mmc-painel {
-  /* cresce com o conteúdo, a partir do botão; rola por dentro quando a lista é grande */
-  position: fixed; bottom: 160px; right: 22px; width: 380px; max-width: calc(100vw - 44px); max-height: calc(100vh - 232px);
-  background: var(--mmc-fundo); border: 1px solid var(--mmc-borda); border-radius: 16px;
+  position: fixed; bottom: 158px; right: 22px; width: 360px; max-width: calc(100vw - 44px); max-height: calc(100vh - 226px);
+  background: var(--mmc-fundo); border: 1px solid var(--mmc-borda); border-radius: 12px;
   display: flex; flex-direction: column; overflow: hidden; z-index: 999998;
-  box-shadow: 0 20px 56px rgba(31, 27, 46, 0.28);
+  box-shadow: 0 18px 44px -12px rgba(20, 14, 50, 0.45);
 }
-#mmc-app .mmc-painel[hidden] { display: none; }
 #mmc-app .mmc-topo {
-  display: flex; align-items: center; justify-content: space-between; padding: 12px 14px;
-  background: linear-gradient(135deg, var(--mmc-roxo), var(--mmc-rosa)); color: #fff;
+  display: flex; align-items: center; justify-content: space-between; height: 52px; padding: 0 8px 0 14px;
+  background: #fff; border-bottom: 1px solid var(--mmc-borda); position: relative; flex-shrink: 0;
 }
-#mmc-app .mmc-marca { display: flex; align-items: center; gap: 8px; font-size: 15px; }
-#mmc-app .mmc-marca img { width: 24px; height: 24px; border-radius: 6px; background: #fff; }
-#mmc-app .mmc-topo-acoes { display: flex; gap: 4px; }
+/* fio da marca no topo (roxo → rosa), como o destaque do menu do Connect */
+#mmc-app .mmc-topo::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: linear-gradient(90deg, var(--mmc-roxo), var(--mmc-rosa)); }
+#mmc-app .mmc-marca { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 600; color: var(--mmc-texto); }
+#mmc-app .mmc-marca b { color: var(--mmc-roxo); font-weight: 700; }
+#mmc-app .mmc-marca img { width: 26px; height: 26px; border-radius: 7px; }
+#mmc-app .mmc-topo-acoes { display: flex; gap: 2px; }
 #mmc-app .mmc-icone {
-  width: 30px; height: 30px; border: 0; border-radius: 8px; background: rgba(255, 255, 255, 0.16);
-  color: #fff; font-size: 15px; cursor: pointer;
+  width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: var(--mmc-suave);
+  display: grid; place-items: center; cursor: pointer; transition: background 0.15s ease, color 0.15s ease;
 }
-#mmc-app .mmc-icone:hover { background: rgba(255, 255, 255, 0.28); }
-#mmc-app .mmc-corpo { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+#mmc-app .mmc-icone:hover { background: var(--mmc-fundo-2); color: var(--mmc-texto); }
+#mmc-app .mmc-corpo { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
 #mmc-app .mmc-rodape {
-  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px;
-  border-top: 1px solid var(--mmc-borda); background: var(--mmc-fundo-2); font-size: 12px; color: var(--mmc-suave);
+  display: grid; grid-template-columns: repeat(3, 1fr) auto; align-items: center; gap: 4px; padding: 8px 10px;
+  border-top: 1px solid var(--mmc-borda); background: var(--mmc-fundo-2); flex-shrink: 0;
 }
-#mmc-app .mmc-rodape b { color: var(--mmc-roxo); font-size: 14px; }
+#mmc-app .mmc-rodape:empty { display: none; }
+#mmc-app .mmc-stat { display: flex; align-items: baseline; justify-content: center; gap: 4px; font-size: 11.5px; color: var(--mmc-suave); }
+#mmc-app .mmc-stat b { font-size: 14px; font-weight: 700; color: var(--mmc-roxo); }
+
+/* ---------- Aviso dentro do painel (não cobre nada) ---------- */
+#mmc-app .mmc-aviso { margin: 10px 14px 0; padding: 9px 11px; border-radius: 8px; font-size: 12.5px; font-weight: 500; line-height: 1.4; flex-shrink: 0; }
+#mmc-app .mmc-aviso-sucesso { background: var(--mmc-verde-suave); color: var(--mmc-verde); border: 1px solid #c8eed6; }
+#mmc-app .mmc-aviso-erro { background: var(--mmc-erro-suave); color: var(--mmc-erro); border: 1px solid #f7d4d4; }
+#mmc-app .mmc-aviso-info { background: var(--mmc-roxo-suave); color: var(--mmc-roxo-escuro); border: 1px solid #ddd8f1; }
 
 /* ---------- Textos ---------- */
-#mmc-app .mmc-titulo { margin: 0; font-size: 15px; font-weight: 700; color: var(--mmc-roxo-escuro); }
+#mmc-app .mmc-titulo { margin: 0; font-size: 15px; font-weight: 700; color: var(--mmc-texto); }
 #mmc-app .mmc-sub { margin: 0; font-size: 12.5px; color: var(--mmc-suave); line-height: 1.45; }
-#mmc-app .mmc-vazio { text-align: center; padding: 18px 10px; display: grid; gap: 6px; background: var(--mmc-fundo-2); border: 1px dashed var(--mmc-borda); border-radius: 10px; }
+#mmc-app .mmc-rotulo { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--mmc-suave); }
+#mmc-app .mmc-vazio {
+  text-align: center; padding: 18px 12px; display: grid; justify-items: center; gap: 8px; color: #a3a2ae;
+  background: var(--mmc-fundo-2); border: 1px dashed #d6d6dd; border-radius: 10px;
+}
+#mmc-app .mmc-vazio b { color: var(--mmc-texto); }
 
-/* ---------- Contato ---------- */
+/* ---------- Conversa aberta ---------- */
+#mmc-app .mmc-conversa {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--mmc-borda); border-radius: 10px; background: #fff;
+}
+#mmc-app .mmc-conversa-vazia { justify-content: center; background: var(--mmc-fundo-2); border-style: dashed; }
+#mmc-app .mmc-conversa-info { min-width: 0; flex: 1; display: grid; gap: 1px; }
+#mmc-app .mmc-conversa-lado { display: grid; justify-items: end; gap: 4px; flex-shrink: 0; }
+
+/* ---------- Contato / avatar ---------- */
 #mmc-app .mmc-contato { display: flex; align-items: center; gap: 10px; }
 #mmc-app .mmc-avatar {
-  width: 42px; height: 42px; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center;
-  background: linear-gradient(135deg, var(--mmc-roxo), var(--mmc-rosa)); color: #fff; font-weight: 700; font-size: 15px;
+  width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center;
+  background: var(--mmc-roxo-suave); color: var(--mmc-roxo); font-weight: 700; font-size: 14px;
 }
+#mmc-app .mmc-avatar-p { width: 34px; height: 34px; font-size: 12px; }
 #mmc-app .mmc-contato-info { min-width: 0; flex: 1; }
-#mmc-app .mmc-nome { margin: 0; font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#mmc-app .mmc-tel { margin: 0; font-size: 12.5px; color: var(--mmc-suave); }
-#mmc-app .mmc-etiqueta { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; background: #f1effa; color: var(--mmc-roxo); }
-#mmc-app .mmc-selo { font-size: 12px; font-weight: 600; padding: 7px 10px; border-radius: 8px; }
-#mmc-app .mmc-selo-lead { background: #ecfdf3; color: #157a3e; }
-#mmc-app .mmc-selo-novo { background: #fdeef3; color: #b3164a; }
+#mmc-app .mmc-nome { margin: 0; font-weight: 600; font-size: 14px; color: var(--mmc-texto); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#mmc-app .mmc-tel { margin: 0; font-size: 12.5px; color: var(--mmc-suave); font-variant-numeric: tabular-nums; }
+#mmc-app .mmc-etiqueta { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--mmc-roxo-suave); color: var(--mmc-roxo); }
 
+/* Badges no estilo do Connect (fundo suave + texto forte) */
+#mmc-app .mmc-badge { display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--mmc-fundo-2); color: var(--mmc-suave); white-space: nowrap; }
+#mmc-app .mmc-badge-lead { background: var(--mmc-verde-suave); color: var(--mmc-verde); }
+#mmc-app .mmc-badge-novo { background: var(--mmc-rosa-suave); color: var(--mmc-rosa-escuro); }
+#mmc-app .mmc-badge-lista { background: var(--mmc-roxo-suave); color: var(--mmc-roxo); }
+#mmc-app .mmc-selo { font-size: 12px; font-weight: 600; padding: 7px 10px; border-radius: 8px; }
+#mmc-app .mmc-selo-lead { background: var(--mmc-verde-suave); color: var(--mmc-verde); }
+#mmc-app .mmc-selo-novo { background: var(--mmc-rosa-suave); color: var(--mmc-rosa-escuro); }
+
+/* ---------- Lista de capturados ---------- */
+#mmc-app .mmc-secao { display: grid; gap: 8px; }
+#mmc-app .mmc-lista-topo { display: flex; align-items: center; justify-content: space-between; }
+#mmc-app .mmc-secao-titulo { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--mmc-texto); }
+#mmc-app .mmc-contador { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; display: inline-grid; place-items: center; background: var(--mmc-roxo-suave); color: var(--mmc-roxo); font-size: 11px; font-weight: 700; }
+#mmc-app .mmc-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+#mmc-app .mmc-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid var(--mmc-borda); border-radius: 10px; background: #fff; transition: border-color 0.15s ease; }
+#mmc-app .mmc-item:hover { border-color: #d3cfe6; }
+#mmc-app .mmc-item-lead { background: #fbfefc; }
+#mmc-app .mmc-item-com-erro { border-color: #f3c2c2; }
+#mmc-app .mmc-item-info { min-width: 0; flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+#mmc-app .mmc-item-info .mmc-nome { font-size: 13px; max-width: 100%; }
+#mmc-app .mmc-item-info .mmc-tel { font-size: 12px; }
+#mmc-app .mmc-item .mmc-fonte { width: auto; max-width: 140px; font-size: 11.5px; padding: 2px 6px; height: 24px; border-radius: 6px; margin-top: 3px; color: var(--mmc-texto); }
+#mmc-app .mmc-item .mmc-badge { margin-top: 3px; }
+#mmc-app .mmc-item-erro { margin: 3px 0 0; font-size: 11.5px; color: var(--mmc-erro); }
+#mmc-app .mmc-item-acoes { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+#mmc-app .mmc-icone-mini { width: 28px; height: 28px; border: 0; border-radius: 7px; background: none; color: #a3a2ae; cursor: pointer; display: grid; place-items: center; }
+#mmc-app .mmc-icone-mini:hover { background: var(--mmc-erro-suave); color: var(--mmc-erro); }
+
+/* ---------- Ficha ---------- */
 #mmc-app .mmc-ficha { border: 1px solid var(--mmc-borda); border-radius: 10px; overflow: hidden; }
 #mmc-app .mmc-linha { display: grid; grid-template-columns: 110px 1fr; gap: 2px 8px; padding: 8px 10px; font-size: 12.5px; border-bottom: 1px solid var(--mmc-borda); }
 #mmc-app .mmc-linha:last-child { border-bottom: 0; }
@@ -91,11 +159,11 @@
 #mmc-app .mmc-form { display: flex; flex-direction: column; gap: 9px; }
 #mmc-app .mmc-form label, #mmc-app .mmc-status { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--mmc-suave); }
 #mmc-app input, #mmc-app select, #mmc-app textarea {
-  font: inherit; font-size: 13.5px; font-weight: 400; color: var(--mmc-texto); background: #fff;
-  border: 1px solid #d9d5e8; border-radius: 8px; padding: 8px 10px; width: 100%; outline: none;
+  font: inherit; font-size: 13px; font-weight: 400; color: var(--mmc-texto); background: #fff;
+  border: 1px solid #d9d8e0; border-radius: 8px; padding: 7px 10px; width: 100%; outline: none;
 }
 #mmc-app textarea { resize: vertical; }
-#mmc-app input:focus, #mmc-app select:focus, #mmc-app textarea:focus { border-color: var(--mmc-roxo); box-shadow: 0 0 0 3px rgba(66, 47, 145, 0.15); }
+#mmc-app input:focus, #mmc-app select:focus, #mmc-app textarea:focus { border-color: var(--mmc-roxo-claro); box-shadow: 0 0 0 3px rgba(66, 47, 145, 0.14); }
 #mmc-app .mmc-duas { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
 #mmc-app .mmc-corretores { border: 1px solid var(--mmc-borda); border-radius: 10px; padding: 8px; margin: 0; display: grid; gap: 4px; }
@@ -107,35 +175,52 @@
 #mmc-app .mmc-corretor small { font-weight: 400; }
 #mmc-app .mmc-indisponivel { opacity: 0.5; cursor: not-allowed; }
 
-/* ---------- Botões ---------- */
+/* ---------- Botões (iguais aos do Connect) ---------- */
 #mmc-app .mmc-btn {
-  border: 1px solid #d9d5e8; background: #fff; color: var(--mmc-roxo); font: inherit; font-size: 13px; font-weight: 600;
-  padding: 9px 12px; border-radius: 9px; cursor: pointer; transition: background 0.15s ease, opacity 0.15s ease;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border: 1px solid #d9d8e0; background: #fff; color: var(--mmc-texto); font: inherit; font-size: 13px; font-weight: 600;
+  height: 36px; padding: 0 14px; border-radius: 8px; cursor: pointer; text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
 }
-#mmc-app .mmc-btn:hover { background: #f1effa; }
-#mmc-app .mmc-btn:disabled { opacity: 0.6; cursor: wait; }
+#mmc-app .mmc-btn:hover { background: var(--mmc-fundo-2); }
+#mmc-app .mmc-btn:disabled { opacity: 0.55; cursor: default; }
 #mmc-app .mmc-btn-primario { background: var(--mmc-roxo); border-color: var(--mmc-roxo); color: #fff; }
-#mmc-app .mmc-btn-primario:hover { background: var(--mmc-roxo-escuro); }
+#mmc-app .mmc-btn-primario:hover:not(:disabled) { background: var(--mmc-roxo-escuro); }
+#mmc-app .mmc-btn-destaque { background: var(--mmc-rosa); border-color: var(--mmc-rosa); color: #fff; }
+#mmc-app .mmc-btn-destaque:hover:not(:disabled) { background: var(--mmc-rosa-escuro); }
+#mmc-app .mmc-btn-suave { background: var(--mmc-roxo-suave); border-color: transparent; color: var(--mmc-roxo); }
+#mmc-app .mmc-btn-suave:hover:not(:disabled) { background: #e2def3; }
+#mmc-app .mmc-btn-captura { height: 42px; font-size: 14px; }
+#mmc-app .mmc-btn-mini { height: 28px; padding: 0 10px; font-size: 12px; border-radius: 7px; }
 #mmc-app .mmc-acoes { display: flex; gap: 6px; flex-wrap: wrap; }
 #mmc-app .mmc-acoes .mmc-btn { flex: 1; }
 #mmc-app .mmc-lembrete { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--mmc-suave); }
 #mmc-app .mmc-chip {
-  border: 1px solid #f6c2d3; background: #fdeef3; color: #b3164a; font: inherit; font-size: 12px; font-weight: 600;
-  padding: 4px 10px; border-radius: 999px; cursor: pointer;
+  border: 1px solid #f6c2d3; background: var(--mmc-rosa-suave); color: var(--mmc-rosa-escuro); font: inherit; font-size: 12px; font-weight: 600;
+  padding: 3px 10px; border-radius: 999px; cursor: pointer;
 }
 #mmc-app .mmc-chip:hover { background: #fbd5e1; }
-#mmc-app .mmc-chip-alerta { margin-left: auto; }
-#mmc-app .mmc-link { font-size: 12.5px; font-weight: 600; color: var(--mmc-rosa); text-decoration: none; align-self: flex-start; }
+#mmc-app .mmc-chip-alerta { justify-self: end; }
+#mmc-app .mmc-link { font-size: 12.5px; font-weight: 600; color: var(--mmc-roxo); text-decoration: none; align-self: flex-start; }
 #mmc-app .mmc-link:hover { text-decoration: underline; }
+#mmc-app .mmc-link-btn { border: 0; background: none; padding: 0; font: inherit; font-size: 12px; font-weight: 600; color: var(--mmc-roxo); cursor: pointer; }
+#mmc-app .mmc-link-btn:hover { text-decoration: underline; }
+#mmc-app .mmc-link-suave { color: var(--mmc-suave); }
+#mmc-app .mmc-link-suave:hover { color: var(--mmc-erro); }
 #mmc-app .mmc-voltar { border: 0; background: none; padding: 0; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--mmc-suave); cursor: pointer; align-self: flex-start; }
 #mmc-app .mmc-voltar:hover { color: var(--mmc-roxo); }
 
-#mmc-app .mmc-alerta { font-size: 12.5px; padding: 8px 10px; border-radius: 8px; background: #fef2f2; color: #b91c1c; }
+#mmc-app .mmc-alerta { font-size: 12.5px; padding: 8px 10px; border-radius: 8px; background: var(--mmc-erro-suave); color: var(--mmc-erro); }
 #mmc-app .mmc-alerta-suave { background: #fff7ed; color: #9a3412; }
 #mmc-app .mmc-mensagem {
   margin: 0; white-space: pre-wrap; font: inherit; font-size: 13px; line-height: 1.5; padding: 10px 12px;
   border-radius: 10px; background: #dcf8c6; border: 1px solid #c5ecab;
 }
+
+/* ---------- Login ---------- */
+#mmc-app .mmc-outra-forma { margin-top: 14px; border-top: 1px solid var(--mmc-borda); padding-top: 10px; }
+#mmc-app .mmc-outra-forma summary { cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--mmc-suave); margin-bottom: 8px; }
+#mmc-app .mmc-outra-forma summary:hover { color: var(--mmc-roxo); }
 
 /* ---------- Carregando ---------- */
 #mmc-app .mmc-carregando { display: flex; justify-content: center; gap: 6px; padding: 40px 0; }
@@ -144,54 +229,16 @@
 #mmc-app .mmc-carregando span:nth-child(3) { animation-delay: 0.3s; background: var(--mmc-rosa); }
 @keyframes mmc-pulo { 0%, 80%, 100% { transform: scale(0.6); opacity: 0.5; } 40% { transform: scale(1); opacity: 1; } }
 
-/* ---------- Avisos rápidos (fora do painel) ---------- */
+/* ---------- Aviso flutuante (só com o painel fechado) ---------- */
 .mmc-toast {
-  position: fixed; bottom: 166px; right: 22px; z-index: 1000000; max-width: 320px; padding: 10px 14px; border-radius: 10px;
+  position: fixed; bottom: 160px; right: 22px; z-index: 1000000; max-width: 300px; padding: 10px 14px; border-radius: 10px;
   font-family: Inter, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 13px; font-weight: 600; color: #fff;
-  background: #2b1d6e; box-shadow: 0 10px 30px rgba(31, 27, 46, 0.3); transition: opacity 0.3s ease, transform 0.3s ease;
+  background: #2f2070; box-shadow: 0 10px 30px rgba(20, 14, 50, 0.35); transition: opacity 0.3s ease, transform 0.3s ease;
 }
-.mmc-toast-sucesso { background: #157a3e; }
+.mmc-toast-sucesso { background: #15803d; }
 .mmc-toast-erro { background: #b91c1c; }
 .mmc-toast-sai { opacity: 0; transform: translateY(8px); }
 
-/* Login: entrar com o Connect (principal) e e-mail/senha (alternativa) */
-#mmc-app .mmc-outra-forma { margin-top: 14px; border-top: 1px solid var(--mmc-borda); padding-top: 10px; }
-#mmc-app .mmc-outra-forma summary { cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--mmc-suave); margin-bottom: 8px; }
-#mmc-app .mmc-outra-forma summary:hover { color: var(--mmc-roxo); }
-#mmc-app [hidden] { display: none !important; }
-
-/* ---------- Capturar → lista → enviar ---------- */
-#mmc-app .mmc-fab-contagem {
-  position: absolute; bottom: -4px; left: -6px; min-width: 21px; height: 21px; padding: 0 5px; border-radius: 999px;
-  display: grid; place-items: center; background: var(--mmc-roxo); color: #fff; font-size: 11px; font-weight: 700;
-  border: 2px solid #fff; box-shadow: 0 2px 8px rgba(66, 47, 145, 0.45);
+@media (prefers-reduced-motion: reduce) {
+  #mmc-app *, #mmc-app *::before, #mmc-app *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
-#mmc-app .mmc-btn-captura {
-  background: var(--mmc-rosa); border-color: var(--mmc-rosa); color: #fff; font-size: 14px; padding: 12px 14px;
-}
-#mmc-app .mmc-btn-captura:hover { background: #c4154e; }
-#mmc-app .mmc-conversa {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-radius: 9px;
-  background: var(--mmc-fundo-2); font-size: 12.5px; color: var(--mmc-texto);
-}
-#mmc-app .mmc-conversa span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#mmc-app .mmc-conversa small { color: var(--mmc-suave); flex-shrink: 0; }
-#mmc-app .mmc-conversa-lead { background: #ecfdf3; color: #157a3e; }
-#mmc-app .mmc-link-btn { border: 0; background: none; padding: 0; font: inherit; font-size: 12.5px; font-weight: 700; color: var(--mmc-rosa); cursor: pointer; flex-shrink: 0; }
-#mmc-app .mmc-link-btn:hover { text-decoration: underline; }
-#mmc-app .mmc-lista-topo { display: flex; align-items: center; justify-content: space-between; font-size: 12.5px; color: var(--mmc-suave); margin-top: 2px; }
-#mmc-app .mmc-lista-topo b { color: var(--mmc-roxo); }
-#mmc-app .mmc-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-#mmc-app .mmc-item { display: flex; align-items: center; gap: 9px; padding: 8px; border: 1px solid var(--mmc-borda); border-radius: 10px; background: #fff; }
-#mmc-app .mmc-item-lead { background: #f6fdf8; border-color: #cdeedb; }
-#mmc-app .mmc-avatar-p { width: 32px; height: 32px; font-size: 12px; }
-#mmc-app .mmc-item-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
-#mmc-app .mmc-item-info .mmc-nome { font-size: 13px; }
-#mmc-app .mmc-item-info .mmc-tel { font-size: 12px; }
-#mmc-app .mmc-item .mmc-fonte { width: auto; max-width: 130px; font-size: 11.5px; padding: 2px 6px; border-radius: 6px; margin-top: 2px; align-self: flex-start; }
-#mmc-app .mmc-selo-mini { align-self: flex-start; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: #ecfdf3; color: #157a3e; margin-top: 2px; }
-#mmc-app .mmc-item-erro { margin: 2px 0 0; font-size: 11.5px; color: #b91c1c; }
-#mmc-app .mmc-item-acoes { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-#mmc-app .mmc-btn-mini { padding: 5px 10px; font-size: 12px; border-radius: 7px; text-decoration: none; }
-#mmc-app .mmc-icone-mini { width: 26px; height: 26px; border: 0; border-radius: 7px; background: none; color: var(--mmc-suave); cursor: pointer; font-size: 13px; }
-#mmc-app .mmc-icone-mini:hover { background: #fdeef3; color: #b3164a; }
