@@ -232,7 +232,8 @@
       '#app aside'
     ];
     for (const sel of candidates) {
-      const el = document.querySelector(sel);
+      // Nunca confundir o painel da própria extensão com o menu do contato do WhatsApp.
+      const el = [...document.querySelectorAll(sel)].find((e) => !e.closest('#mmc-app, #memude-overlay'));
       if (el) return el;
     }
     return null;
@@ -262,10 +263,11 @@
 
     let drawer = findDrawer();
     if (!drawer) {
-      // Retry with a MutationObserver
+      // Retry with a MutationObserver — só dentro do WhatsApp (#app), nunca no painel da extensão
+      const app = document.getElementById('app') || document.body;
       drawer = await waitForElement(
-        '[data-testid="contact-info-drawer"], [data-testid="panel-right"], #app aside, section',
-        document.body,
+        '[data-testid="contact-info-drawer"], [data-testid="panel-right"], aside, section',
+        app,
         4000
       );
     }
