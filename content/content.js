@@ -6,8 +6,10 @@
 (function () {
   'use strict';
 
-  if (window.__MEMUDE_CONTENT_LOADED) return;
-  window.__MEMUDE_CONTENT_LOADED = true;
+  // Uma versão anterior da extensão (atualizada sem F5) perde a conexão; esta assume.
+  const vivo = () => { try { return !!(chrome.runtime && chrome.runtime.id); } catch (e) { return false; } };
+  if (window.__MMC_CONTENT && window.__MMC_CONTENT.vivo()) return;
+  window.__MMC_CONTENT = { vivo };
 
   if (window.__MEMUDE_EXTRACTOR) window.__MEMUDE_EXTRACTOR.startNetworkInterceptor();
 
@@ -17,6 +19,7 @@
     if (!painel) { responder({ ok: false }); return true; }
     if (pedido.acao === 'PAINEL_ABRIR') { painel.abrir(); responder({ ok: true }); return true; }
     if (pedido.acao === 'CADASTRO_RAPIDO') { painel.cadastroRapido(); responder({ ok: true }); return true; }
+    if (pedido.acao === 'SESSAO_MUDOU') { painel.recarregarSessao(); responder({ ok: true }); return true; }
     return false;
   });
 })();

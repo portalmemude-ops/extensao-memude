@@ -16,15 +16,26 @@
   </header>
 
   <main>
+    <section id="verificando">
+      <p class="sub centro">Verificando seu login no Connect…</p>
+    </section>
+
     <section id="sem-login" hidden>
-      <form id="form-login" class="cartao">
-        <h2>Entre com sua conta do Connect</h2>
-        <p class="sub">Mesmo e-mail e senha do core.memudecore.com.br.</p>
-        <label>E-mail<input type="email" id="email" required autocomplete="username"></label>
-        <label>Senha<input type="password" id="senha" required autocomplete="current-password"></label>
-        <p class="erro" id="erro-login" hidden></p>
-        <button type="submit" class="btn primario" id="btn-entrar">Entrar</button>
-      </form>
+      <div class="cartao">
+        <h2>Conecte a extensão ao Connect</h2>
+        <p class="sub">Se você já está logado no Connect neste navegador, é só clicar. Sem senha.</p>
+        <p class="aviso" id="aviso-connect" hidden></p>
+        <button type="button" class="btn primario" id="btn-entrar-connect">Entrar com o Connect</button>
+      </div>
+      <details class="cartao">
+        <summary>Entrar com e-mail e senha</summary>
+        <form id="form-login" class="form-login">
+          <label>E-mail<input type="email" id="email" required autocomplete="username"></label>
+          <label>Senha<input type="password" id="senha" required autocomplete="current-password"></label>
+          <p class="erro" id="erro-login" hidden></p>
+          <button type="submit" class="btn" id="btn-entrar">Entrar</button>
+        </form>
+      </details>
     </section>
 
     <section id="com-login" hidden>
@@ -48,8 +59,7 @@
       </div>
 
       <div class="acoes">
-        <button type="button" class="btn primario" id="btn-whatsapp">Abrir WhatsApp Web</button>
-        <button type="button" class="btn" id="btn-connect">Abrir o Connect</button>
+        <button type="button" class="btn primario" id="btn-connect">Abrir o Connect</button>
       </div>
 
       <details class="cartao">
