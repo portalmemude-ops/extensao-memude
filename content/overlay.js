@@ -118,17 +118,17 @@
         <span class="mmc-fab-ponto" id="mmc-app-ponto" hidden></span>
         <span class="mmc-fab-contagem" id="mmc-app-contagem" title="Contatos capturados aguardando envio" hidden></span>
       </button>
-      <section class="mmc-painel" id="mmc-painel" hidden aria-label="MeMude Connect">
-        <header class="mmc-topo">
+      <div class="mmc-painel" id="mmc-painel" hidden role="dialog" aria-label="MeMude Connect">
+        <div class="mmc-topo">
           <div class="mmc-marca"><img src="${chrome.runtime.getURL('icons/icon48.png')}" alt=""><span>MeMude <b>Connect</b></span></div>
           <div class="mmc-topo-acoes">
             <button type="button" class="mmc-icone" data-acao="atualizar" title="Atualizar">⟳</button>
             <button type="button" class="mmc-icone" data-acao="fechar" title="Fechar (Esc)">✕</button>
           </div>
-        </header>
+        </div>
         <div class="mmc-corpo" id="mmc-corpo"></div>
-        <footer class="mmc-rodape" id="mmc-rodape"></footer>
-      </section>
+        <div class="mmc-rodape" id="mmc-rodape"></div>
+      </div>
       <datalist id="mmc-app-emps"></datalist>`;
     document.body.appendChild(raiz);
     raiz.addEventListener('click', aoClicar);
