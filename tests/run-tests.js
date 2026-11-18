@@ -1,9 +1,9 @@
 /* ============================================================
    MeMude - Suíte de testes (node, sem dependências)
    Roda:  node tests/run-tests.js
-   Cobre: phone-utils, settings (migração), sheets-api (linhas/
-          dedup), phone-extractor (etiqueta/Fonte) e o enriquecimento
-          de contatos do service worker.
+   Cobre: phone-utils, etiqueta (Fonte), mapa de fontes, login
+          (renovação de sessão) e cliente da API (401 e sem conexão).
+
    ============================================================ */
 'use strict';
 
@@ -35,7 +35,8 @@ function makeChromeMock(initialSync = {}) {
       else if (Array.isArray(key)) { const o = {}; key.forEach(k => o[k] = bucket[k]); cb(o); }
       else cb({ ...bucket });
     },
-    set(obj, cb) { Object.assign(bucket, obj); if (cb) cb(); }
+    set(obj, cb) { Object.assign(bucket, obj); if (cb) cb(); },
+    remove(key, cb) { [].concat(key).forEach((k) => delete bucket[k]); if (cb) cb(); }
   });
   return { storage: { sync: store(sync), local: store(local) }, _sync: sync, _local: local,
            runtime: { id: 'test', lastError: null } };
@@ -81,98 +82,7 @@ function testPhoneUtils() {
      'phoneKey: números diferentes → chaves diferentes');
 }
 
-// ============================================================
-// 2) settings — migração de versão
-// ============================================================
-function testSettingsMigration() {
-  // Instalação ANTIGA: mapa defasado (colName A / colPhone B) e sem versão.
-  const oldUser = {
-    sheetUrl: 'https://docs.google.com/spreadsheets/d/ABC123/edit',
-    spreadsheetId: 'ABC123',
-    sheetName: 'LEADS',
-    colName: 'A', colPhone: 'B', colStatus: 'C',
-    add9thDigit: false,
-    autoSendOnCapture: false
-  };
-  global.chrome = makeChromeMock({ memude_settings: oldUser });
-  const S = loadGlobal('utils/settings.js', 'Settings');
-
-  return S.getSettings().then((s) => {
-    // Campos migrados
-    eq(s.colDate, 'A', 'migração: colDate = A');
-    eq(s.colName, 'B', 'migração: colName = B');
-    eq(s.colPhone, 'C', 'migração: colPhone = C');
-    eq(s.colStatus, 'G', 'migração: colStatus = G (Status preenchido)');
-    eq(s.colSource, 'F', 'migração: colSource = F');
-    eq(s.add9thDigit, true, 'migração: 9º dígito ligado');
-    eq(s.formatPhone, true, 'migração: formatação ligada');
-    eq(s.defaultStatus, 'NOVO', 'migração: status padrão NOVO');
-    ok(Array.isArray(s.knownSources) && s.knownSources.includes('Facebook'), 'migração: knownSources presente');
-    eq(s.defaultsVersion, 3, 'migração: versão atualizada');
-    // Preservados
-    eq(s.sheetUrl, oldUser.sheetUrl, 'preserva sheetUrl');
-    eq(s.spreadsheetId, 'ABC123', 'preserva spreadsheetId');
-    eq(s.sheetName, 'LEADS', 'preserva sheetName');
-    eq(s.autoSendOnCapture, false, 'preserva preferência do usuário (autoSend)');
-    // Persistiu no storage?
-    eq(global.chrome._sync.memude_settings.defaultsVersion, 3, 'migração foi gravada no storage');
-
-    // Segunda chamada não deve re-migrar nem quebrar
-    return S.getSettings().then((s2) => {
-      eq(s2.colPhone, 'C', 'idempotente: 2ª leitura mantém mapa');
-    });
-  });
-}
-
-// ============================================================
-// 3) sheets-api — montagem de linhas + dedup
-// ============================================================
-function testSheetsApi() {
-  globalThis.Logger = { isDebug: () => false, debug() {}, info() {}, warn() {}, error() {} };
-  loadGlobal('utils/phone-utils.js', 'PhoneUtils');
-  const API = loadGlobal('utils/sheets-api.js', 'SheetsAPI');
-
-  // Conversões de coluna
-  eq(API.colLetterToIndex('A'), 0, 'A → 0');
-  eq(API.colLetterToIndex('F'), 5, 'F → 5');
-  eq(API._indexToColLetter(0), 'A', '0 → A');
-  eq(API._indexToColLetter(5), 'F', '5 → F');
-  eq(API.parseSpreadsheetUrl('https://docs.google.com/spreadsheets/d/XYZ/edit#gid=0'), 'XYZ', 'parse URL');
-
-  // appendContacts deve montar A..G com Data/Nome/Whatsapp/Fonte/Status,
-  // forçando o telefone como texto (apóstrofo) p/ não virar fórmula.
-  let captured = null;
-  global.fetch = async (url, opts) => {
-    captured = { url, body: JSON.parse(opts.body) };
-    return { ok: true, json: async () => ({ updates: { updatedRows: 1 } }) };
-  };
-  const cols = { date: 'A', name: 'B', phone: 'C', status: 'G', source: 'F', notes: '', timestamp: '' };
-  const contacts = [{ date: '18/06/2026', name: 'Maria', phone: '+55 (85) 98833-6228', source: 'Facebook', status: 'NOVO' }];
-
-  return API.appendContacts('SID', 'LEADS', cols, contacts, 'tok').then((res) => {
-    ok(res.success, 'append retornou sucesso');
-    const row = captured.body.values[0];
-    eq(row.length, 7, 'linha cobre A..G (7 colunas)');
-    eq(row[0], '18/06/2026', 'A = Data');
-    eq(row[1], 'Maria', 'B = Nome');
-    eq(row[2], "'+55 (85) 98833-6228", 'C = Whatsapp como texto (apóstrofo anti-fórmula)');
-    eq(row[3], '', 'D = Email vazio');
-    eq(row[4], '', 'E = Imóvel vazio');
-    eq(row[5], 'Facebook', 'F = Fonte (etiqueta)');
-    eq(row[6], 'NOVO', 'G = Status NOVO');
-    ok(captured.url.includes('A%3AG') || decodeURIComponent(captured.url).includes('A:G'), 'range A:G');
-
-    // getExistingPhones: dedup tolerante ao 9
-    global.fetch = async () => ({ ok: true, json: async () => ({ values: [['+55 (85) 8833-6228']] }) });
-    return API.getExistingPhones('SID', 'LEADS', 'C', 'tok').then((set) => {
-      const P = globalThis.PhoneUtils;
-      ok(set.has(P.phoneKey('+5585988336228')), 'dedup: número com 9 reconhece existente sem 9');
-    });
-  });
-}
-
-// ============================================================
-// 4) phone-extractor — leitura da etiqueta (Fonte)
+// 2) phone-extractor — leitura da etiqueta (Fonte)
 // ============================================================
 function makeDomMock(headerText, selRowText, labelEls = []) {
   const mk = (t) => (t == null ? null : { textContent: t });
@@ -219,23 +129,102 @@ function testExtractorLabel() {
 }
 
 // ============================================================
-// 5) Enriquecimento estilo service-worker (data + 9 + formato)
+
 // ============================================================
-function testEnrichment() {
-  globalThis.Logger = { isDebug: () => false, debug() {}, info() {}, warn() {}, error() {} };
-  const P = loadGlobal('utils/phone-utils.js', 'PhoneUtils');
-  const settings = { add9thDigit: true, formatPhone: true, defaultSource: '', defaultStatus: 'NOVO' };
+// 3) fontes — etiqueta do WhatsApp → Fonte do sistema
+// ============================================================
+function testFontes() {
+  const F = loadGlobal('utils/fontes.js', 'MemudeFontes');
+  eq(F.fonteDaEtiqueta('Google'), 'Google', 'Google → Google');
+  eq(F.fonteDaEtiqueta('Facebook'), 'Meta', 'Facebook → Meta');
+  eq(F.fonteDaEtiqueta('Instagram'), 'Meta', 'Instagram → Meta');
+  eq(F.fonteDaEtiqueta('Tráfego'), 'Meta', 'Tráfego (com acento) → Meta');
+  eq(F.fonteDaEtiqueta('Site'), 'Cadastro', 'Site → Cadastro');
+  eq(F.fonteDaEtiqueta('Indicação'), 'Outros', 'Indicação → Outros');
+  eq(F.fonteDaEtiqueta(''), '', 'sem etiqueta → vazio (SDR escolhe)');
+  eq(F.fonteDaEtiqueta('Cliente VIP'), '', 'etiqueta desconhecida → vazio');
+  eq(F.FONTES, ['Google', 'Meta', 'Cadastro', 'Follow', 'Outros'], 'mesmas fontes do sistema');
+}
 
-  const c = { name: 'Ana', phone: P.normalizePhone('8588336228'), source: 'Google' };
-  let phone = c.phone;
-  if (settings.add9thDigit) phone = P.add9thDigit(phone);
-  if (settings.formatPhone) phone = P.formatPhoneBR(phone);
+// ============================================================
+// 4) login — sessão, renovação e expiração
+// ============================================================
+function respostaFetch(status, corpo) {
+  return Promise.resolve({ ok: status >= 200 && status < 300, status, json: () => Promise.resolve(corpo) });
+}
 
-  eq(phone, '+55 (85) 98833-6228', 'pipeline completo: 9 + formato');
-  eq(c.source || settings.defaultSource || '', 'Google', 'fonte preservada da etiqueta');
-  // status recebe o default "NOVO"
-  const status = c.status || settings.defaultStatus || '';
-  eq(status, 'NOVO', 'status default NOVO no enriquecimento');
+async function testAuth() {
+  globalThis.chrome = makeChromeMock();
+  loadGlobal('utils/config.js', 'MEMUDE_CONFIG');
+  const chamadas = [];
+  globalThis.fetch = (url, opts) => {
+    chamadas.push({ url, corpo: JSON.parse(opts.body || '{}') });
+    if (url.includes('grant_type=password')) {
+      return opts && JSON.parse(opts.body).password === 'certa'
+        ? respostaFetch(200, { access_token: 'A1', refresh_token: 'R1', expires_in: 3600, user: { email: 'sdr@memude.com.br', id: 'u1' } })
+        : respostaFetch(400, { error_description: 'Invalid login credentials' });
+    }
+    if (url.includes('grant_type=refresh_token')) {
+      return JSON.parse(opts.body).refresh_token === 'R1'
+        ? respostaFetch(200, { access_token: 'A2', refresh_token: 'R2', expires_in: 3600, user: { email: 'sdr@memude.com.br', id: 'u1' } })
+        : respostaFetch(400, {});
+    }
+    return respostaFetch(204, {});
+  };
+  const A = loadGlobal('utils/auth.js', 'MemudeAuth');
+
+  let erro = null;
+  try { await A.entrar('sdr@memude.com.br', 'errada'); } catch (e) { erro = e.message; }
+  eq(erro, 'E-mail ou senha incorretos', 'senha errada → mensagem clara');
+
+  await A.entrar('sdr@memude.com.br', 'certa');
+  eq(await A.sessao(), { email: 'sdr@memude.com.br', user_id: 'u1' }, 'sessão guardada sem a senha');
+  eq(await A.token(), 'A1', 'token válido é reaproveitado');
+  ok(!JSON.stringify(globalThis.chrome._local).includes('certa'), 'senha nunca vai para o storage');
+
+  // Token perto de vencer → renova sozinho
+  globalThis.chrome._local[A.CHAVE].expira_em = Date.now() + 10_000;
+  eq(await A.token(), 'A2', 'token vencendo é renovado');
+
+  // Refresh recusado → sessão some e pede login
+  globalThis.chrome._local[A.CHAVE].refresh_token = 'invalido';
+  erro = null;
+  try { await A.token(true); } catch (e) { erro = e.code; }
+  eq(erro, 'NEEDS_LOGIN', 'refresh recusado → NEEDS_LOGIN');
+  eq(await A.sessao(), null, 'sessão apagada depois de expirar');
+}
+
+// ============================================================
+// 5) API — renova em 401 e sinaliza falta de conexão
+// ============================================================
+async function testApi() {
+  globalThis.chrome = makeChromeMock();
+  loadGlobal('utils/config.js', 'MEMUDE_CONFIG');
+  let tokens = ['T1', 'T2'];
+  globalThis.MemudeAuth = { token: (forcar) => Promise.resolve(forcar ? tokens[1] : tokens[0]) };
+  const usados = [];
+  globalThis.fetch = (url, opts) => {
+    usados.push(opts.headers.Authorization);
+    return opts.headers.Authorization === 'Bearer T1' ? respostaFetch(401, { erro: 'expirado' }) : respostaFetch(201, { lead: { id: 'L1' } });
+  };
+  const Api = loadGlobal('utils/api.js', 'MemudeApi');
+  const r = await Api.criarLead({ nome: 'Ana', telefone: '85999990000' });
+  eq(r.lead.id, 'L1', 'cadastra depois de renovar o token');
+  eq(usados, ['Bearer T1', 'Bearer T2'], 'tenta de novo uma vez com token renovado');
+
+  globalThis.fetch = () => Promise.reject(new TypeError('Failed to fetch'));
+  let code = null;
+  try { await Api.buscar('85999990000'); } catch (e) { code = e.code; }
+  eq(code, 'OFFLINE', 'sem internet → OFFLINE (vai para a fila)');
+
+  globalThis.fetch = () => respostaFetch(409, { duplicado: true, lead: { id: 'L9' } });
+  const dup = await Api.criarLead({ nome: 'Ana', telefone: '85999990000' });
+  eq([dup.status, dup.duplicado], [409, true], '409 (já é lead) não é erro: devolve a ficha');
+
+  globalThis.fetch = () => respostaFetch(400, { erro: 'Telefone inválido: informe DDD e número' });
+  let msg = null;
+  try { await Api.criarLead({ nome: 'Ana', telefone: '123' }); } catch (e) { msg = [e.message, e.code]; }
+  eq(msg, ['Telefone inválido: informe DDD e número', 'RECUSADO'], 'erro do sistema chega em português');
 }
 
 // ------------------------------------------------------------
@@ -244,10 +233,10 @@ function testEnrichment() {
 (async () => {
   try {
     testPhoneUtils();
-    await testSettingsMigration();
-    await testSheetsApi();
     testExtractorLabel();
-    testEnrichment();
+    testFontes();
+    await testAuth();
+    await testApi();
   } catch (err) {
     failed++;
     failures.push('EXCEÇÃO não tratada: ' + (err && err.stack || err));

@@ -364,7 +364,8 @@
 
     // --- 4) Drawer: usado só se faltar telefone OU se temos só o telefone
     //                e queremos descobrir o nome ---
-    if (header && (!phone || !name)) {
+    // opts.semGaveta: leitura rápida (troca de conversa) sem abrir o painel de dados do contato
+    if (header && !opts.semGaveta && (!phone || !name)) {
       const drawer = await ensureDrawer(header);
       if (drawer) {
         if (!phone) {
