@@ -80,14 +80,23 @@
 
   /** Aviso: dentro do painel quando ele está aberto (não cobre nada); flutuante quando fechado. */
   let timerAviso = null;
-  function toast(texto, tipo = 'info') {
+  function toast(texto, tipo = 'info', botao = null) {
     const faixa = document.getElementById('mmc-app-aviso');
     if (est.aberto && faixa) {
       faixa.className = `mmc-aviso mmc-aviso-${tipo}`;
       faixa.textContent = texto;
+      // Botão opcional no aviso (ex.: Desfazer)
+      if (botao) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'mmc-aviso-acao';
+        b.dataset.acao = botao.acao;
+        b.textContent = botao.rotulo;
+        faixa.appendChild(b);
+      }
       faixa.hidden = false;
       clearTimeout(timerAviso);
-      timerAviso = setTimeout(() => { faixa.hidden = true; }, tipo === 'erro' ? 6000 : 3500);
+      timerAviso = setTimeout(() => { faixa.hidden = true; }, tipo === 'erro' || botao ? 6000 : 3500);
       return;
     }
     const t = document.createElement('div');
@@ -409,7 +418,7 @@
           ${i.existe
             ? (i.url ? `<a class="mmc-btn mmc-btn-mini" href="${esc(i.url)}" target="_blank" rel="noopener">Abrir</a>` : '')
             : `<button type="button" class="mmc-btn mmc-btn-mini mmc-btn-suave" data-acao="enviar-item" data-chave="${esc(i.chave)}" ${i.enviando || est.enviandoTodos ? 'disabled' : ''}>${i.enviando ? 'Enviando…' : 'Enviar'}</button>`}
-          <button type="button" class="mmc-icone-mini" data-acao="remover-item" data-chave="${esc(i.chave)}" title="Tirar da lista" aria-label="Tirar da lista">${ICONE.lixo}</button>
+          <button type="button" class="mmc-btn mmc-btn-mini mmc-btn-remover" data-acao="remover-item" data-chave="${esc(i.chave)}" title="Tirar este contato da lista (não mexe no Connect)" aria-label="Remover ${esc(i.nome || i.telefone)} da lista">${ICONE.lixo}<span>Remover</span></button>
         </div>
       </li>`).join('');
     return `
@@ -668,8 +677,23 @@
     if (acao === 'enviar-item') return enviarUm(alvo.dataset.chave);
     if (acao === 'enviar-todos') return enviarTodos();
     if (acao === 'remover-item') {
-      est.capturados = est.capturados.filter((i) => i.chave !== alvo.dataset.chave);
-      await salvarLista(); render(); return;
+      const indice = est.capturados.findIndex((i) => i.chave === alvo.dataset.chave);
+      if (indice < 0) return;
+      const [item] = est.capturados.splice(indice, 1);
+      est.removido = { item, indice };
+      await salvarLista(); render();
+      toast(`${item.nome || item.telefone} saiu da lista`, 'info', { rotulo: 'Desfazer', acao: 'desfazer-remocao' });
+      return;
+    }
+    if (acao === 'desfazer-remocao') {
+      const r = est.removido;
+      est.removido = null;
+      const faixa = document.getElementById('mmc-app-aviso');
+      if (faixa) faixa.hidden = true;
+      if (!r || est.capturados.some((i) => i.chave === r.item.chave)) return;
+      est.capturados.splice(Math.min(r.indice, est.capturados.length), 0, r.item);
+      await salvarLista(); render();
+      return;
     }
     if (acao === 'limpar-lista') {
       const n = pendentes().length;
