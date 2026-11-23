@@ -242,3 +242,12 @@
 @media (prefers-reduced-motion: reduce) {
   #mmc-app *, #mmc-app *::before, #mmc-app *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* Remover da lista: botão com texto, discreto até passar o mouse */
+#mmc-app .mmc-btn-remover { background: transparent; border-color: transparent; color: var(--mmc-suave); gap: 4px; padding: 0 8px; }
+#mmc-app .mmc-btn-remover:hover:not(:disabled) { background: var(--mmc-erro-suave); color: var(--mmc-erro); }
+#mmc-app .mmc-aviso { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+#mmc-app .mmc-aviso[hidden] { display: none !important; }
+#mmc-app .mmc-aviso-acao { flex-shrink: 0; border: 0; background: transparent; font: inherit; font-size: 12.5px; font-weight: 700; color: var(--mmc-roxo); text-decoration: underline; cursor: pointer; padding: 0; }
+#mmc-app .mmc-item-info .mmc-tel { white-space: nowrap; }
+#mmc-app .mmc-item { padding-right: 6px; }

@@ -1,6 +1,6 @@
 {
   "name": "memude-connect-whatsapp",
-  "version": "2.3.1",
+  "version": "2.3.2",
   "description": "Extensão Chrome do MeMude Connect para o WhatsApp Web",
   "private": true,
   "scripts": {
